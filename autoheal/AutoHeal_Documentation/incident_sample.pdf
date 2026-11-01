@@ -1,0 +1,131 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612.0 792.0] /Resources << /Font << /F1 999 0 R /F2 998 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 5197 >>
+stream
+0.050 0.080 0.120 rg
+0.00 712.00 612.00 80.00 re f
+1.000 1.000 1.000 rg
+BT /F2 18.00 Tf 36.00 756.00 Td (AUTOHEAL DEFENSIVE INCIDENT REPORT) Tj ET
+BT /F1 10.00 Tf 36.00 736.00 Td (Enterprise Application Security Incident Response & Forensic Dossier) Tj ET
+0.020 0.450 0.850 rg
+420.00 730.00 156.00 32.00 re f
+1.000 1.000 1.000 rg
+BT /F2 11.00 Tf 435.00 742.00 Td (INC-2026-B8567645) Tj ET
+0.960 0.970 0.980 rg
+36.00 620.00 540.00 75.00 re f
+0.850 0.880 0.900 RG
+1.00 w 36.00 620.00 m 576.00 620.00 l S
+0.920 0.400 0.050 rg
+46.00 672.00 90.00 18.00 re f
+1.000 1.000 1.000 rg
+BT /F2 9.00 Tf 54.00 676.00 Td (SEV: HIGH) Tj ET
+0.450 0.500 0.550 rg
+BT /F2 9.00 Tf 146.00 677.00 Td (STATUS: CONTAINED  |  VERIFICATION: VERIFIED_CONTAINED) Tj ET
+0.150 0.180 0.220 rg
+BT /F1 9.00 Tf 46.00 652.00 Td (Observed Source IP:  198.51.100.42) Tj ET
+BT /F1 9.00 Tf 280.00 652.00 Td (Detection Rule ID:   AUTH-001) Tj ET
+BT /F1 9.00 Tf 46.00 634.00 Td (Incident Timestamp:   2026-10-18 13:05:29) Tj ET
+BT /F1 9.00 Tf 280.00 634.00 Td (Threat Category:     Credential Stuffing / Brute Force) Tj ET
+BT /F2 8.00 Tf 46.00 616.00 Td (MITRE ATT&CK:       T1110.001 - Brute Force: Password Guessing) Tj ET
+BT /F1 8.00 Tf 360.00 616.00 Td (Tactic: Credential Access) Tj ET
+0.020 0.450 0.850 rg
+BT /F2 12.00 Tf 36.00 585.00 Td (1. EXECUTIVE SUMMARY & IMPACT) Tj ET
+1.00 w 36.00 581.00 m 576.00 581.00 l S
+0.150 0.180 0.220 rg
+BT /F1 10.00 Tf 36.00 565.00 Td (Burst of 4 failed logins detected from IP 198.51.100.42) Tj ET
+BT /F1 9.00 Tf 36.00 547.00 Td (Actual Impact:     Attempted malicious interaction intercepted before application layer breach.) Tj ET
+BT /F1 9.00 Tf 36.00 533.00 Td (Potential Impact:  High risk of Credential Stuffing / Brute Force compromising data integrity or av) Tj ET
+0.020 0.450 0.850 rg
+BT /F2 12.00 Tf 36.00 508.00 Td (2. DETECTION DETAILS & FORENSIC EVIDENCE) Tj ET
+1.00 w 36.00 504.00 m 576.00 504.00 l S
+0.150 0.180 0.220 rg
+BT /F2 9.00 Tf 36.00 488.00 Td (Target Endpoint\(s\):  /api/shop) Tj ET
+BT /F1 9.00 Tf 36.00 474.00 Td (Detection Engine:    AutoHeal Real-Time AppSec Inspection & Correlation Swarm) Tj ET
+BT /F2 9.00 Tf 36.00 456.00 Td (Captured Forensic Evidence \(Sensitive Credentials Redacted\):) Tj ET
+0.940 0.950 0.960 rg
+36.00 380.00 540.00 70.00 re f
+0.150 0.180 0.220 rg
+BT /F1 8.00 Tf 46.00 438.00 Td ({) Tj ET
+BT /F1 8.00 Tf 46.00 427.00 Td (  "client_ip": "198.51.100.42",) Tj ET
+BT /F1 8.00 Tf 46.00 416.00 Td (  "failed_attempt_count": 4,) Tj ET
+BT /F1 8.00 Tf 46.00 405.00 Td (  "target_endpoint": "/api/shop/auth/login") Tj ET
+BT /F1 8.00 Tf 46.00 394.00 Td (}) Tj ET
+0.020 0.450 0.850 rg
+BT /F2 12.00 Tf 36.00 357.00 Td (3. AUTONOMOUS DEFENSIVE MITIGATION & AUDIT) Tj ET
+1.00 w 36.00 353.00 m 576.00 353.00 l S
+0.150 0.180 0.220 rg
+BT /F2 9.00 Tf 36.00 337.00 Td (Action Type: BLOCK_IP | Target: 198.51.100.42) Tj ET
+BT /F1 9.00 Tf 36.00 323.00 Td (Mitigation Outcome: Client IP 198.51.100.42 dynamically quarantined for 180s. \(Remediated in 40.12ms\)) Tj ET
+BT /F1 9.00 Tf 36.00 309.00 Td (Verification State: VERIFIED_CONTAINED \(Post-action barrier validation succeeded\)) Tj ET
+0.020 0.450 0.850 rg
+BT /F2 12.00 Tf 36.00 284.00 Td (4. RECENT TELEMETRY TIMELINE AUDIT) Tj ET
+1.00 w 36.00 280.00 m 576.00 280.00 l S
+0.450 0.500 0.550 rg
+BT /F2 8.00 Tf 36.00 266.00 Td (TIMESTAMP \(UTC\)) Tj ET
+BT /F2 8.00 Tf 170.00 266.00 Td (ENDPOINT) Tj ET
+BT /F2 8.00 Tf 330.00 266.00 Td (STATUS) Tj ET
+BT /F2 8.00 Tf 390.00 266.00 Td (EVENT TYPE) Tj ET
+BT /F2 8.00 Tf 490.00 266.00 Td (ACTION TAKEN) Tj ET
+0.150 0.180 0.220 rg
+BT /F1 8.00 Tf 36.00 254.00 Td (2026-10-18 13:05:29) Tj ET
+BT /F1 8.00 Tf 170.00 254.00 Td (POST /api/shop/auth/logi) Tj ET
+BT /F1 8.00 Tf 330.00 254.00 Td (403) Tj ET
+BT /F1 8.00 Tf 390.00 254.00 Td (BLOCKED_IP_ACCES) Tj ET
+BT /F2 8.00 Tf 490.00 254.00 Td (QUARANTINED) Tj ET
+BT /F1 8.00 Tf 36.00 242.00 Td (2026-10-18 13:05:29) Tj ET
+BT /F1 8.00 Tf 170.00 242.00 Td (POST /api/shop/auth/logi) Tj ET
+BT /F1 8.00 Tf 330.00 242.00 Td (403) Tj ET
+BT /F1 8.00 Tf 390.00 242.00 Td (BLOCKED_IP_ACCES) Tj ET
+BT /F2 8.00 Tf 490.00 242.00 Td (QUARANTINED) Tj ET
+BT /F1 8.00 Tf 36.00 230.00 Td (2026-10-18 13:05:29) Tj ET
+BT /F1 8.00 Tf 170.00 230.00 Td (POST /api/shop/auth/logi) Tj ET
+BT /F1 8.00 Tf 330.00 230.00 Td (403) Tj ET
+BT /F1 8.00 Tf 390.00 230.00 Td (BLOCKED_IP_ACCES) Tj ET
+BT /F2 8.00 Tf 490.00 230.00 Td (QUARANTINED) Tj ET
+BT /F1 8.00 Tf 36.00 218.00 Td (2026-10-18 13:05:29) Tj ET
+BT /F1 8.00 Tf 170.00 218.00 Td (POST /api/shop/auth/logi) Tj ET
+BT /F1 8.00 Tf 330.00 218.00 Td (403) Tj ET
+BT /F1 8.00 Tf 390.00 218.00 Td (BLOCKED_IP_ACCES) Tj ET
+BT /F2 8.00 Tf 490.00 218.00 Td (QUARANTINED) Tj ET
+BT /F1 8.00 Tf 36.00 206.00 Td (2026-10-18 13:05:29) Tj ET
+BT /F1 8.00 Tf 170.00 206.00 Td (POST /api/shop/auth/logi) Tj ET
+BT /F1 8.00 Tf 330.00 206.00 Td (403) Tj ET
+BT /F1 8.00 Tf 390.00 206.00 Td (BLOCKED_IP_ACCES) Tj ET
+BT /F2 8.00 Tf 490.00 206.00 Td (QUARANTINED) Tj ET
+0.850 0.880 0.900 RG
+0.80 w 36.00 45.00 m 576.00 45.00 l S
+0.450 0.500 0.550 rg
+BT /F1 8.00 Tf 36.00 32.00 Td (AutoHeal Sentinel Platform   Enterprise Autonomous Security Architecture) Tj ET
+BT /F1 8.00 Tf 475.00 32.00 Td (Page 1 of 1   SEC-CONFIDENTIAL) Tj ET
+endstream
+endobj
+999 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+998 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000265 00000 n 
+0000005514 00000 n 
+0000005586 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+5663
+%%EOF

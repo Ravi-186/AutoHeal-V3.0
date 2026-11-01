@@ -1,0 +1,60 @@
+%% AutoHeal & ShopSphere System Architecture Diagram
+flowchart TB
+    subgraph PresentationTier["1. Presentation Tier"]
+        UI_SOC["AutoHeal Enterprise SOC UI<br/>(SPA Dashboard, Live Metrics, Forensics)<br/><i>web/templates/index.html</i>"]
+        UI_AttackCenter["Attack Center Control Console<br/>(Scenario Dispatch, SSE Stream)<br/><i>web/static/js/script.js</i>"]
+        UI_Storefront["ShopSphere E-Commerce Storefront<br/>(Flipkart-Inspired Replica)<br/><i>web/templates/shopsphere.html</i>"]
+        UI_3DSOC["3D Spatial SOC Topology<br/>(Streamlit WebGL on Port 8501)<br/><i>dashboard/app.py</i>"]
+    end
+
+    subgraph APITier["2. Application Gateway & API Tier (Port 8000)"]
+        ASGI["FastAPI ASGI Core Server<br/><i>server.py</i>"]
+        Middleware["AppSec Protection Middleware<br/>(Perimeter Intercept, Rate Limiting)<br/><i>src/appsec/middleware.py</i>"]
+        ShopAPI["ShopSphere REST API<br/>(Catalog, Cart, Auth, Orders)<br/><i>shopsphere/api.py</i>"]
+        SecAPI["AutoHeal AppSec Management API<br/>(Incidents, Telemetry, Vulnerabilities)<br/><i>src/appsec/api.py</i>"]
+    end
+
+    subgraph SecurityTier["3. Autonomous Security Pipeline (The Five Components)"]
+        Comp1["Component 1: Detection Agent<br/>(Payload Regex + Feature Extraction)<br/><i>src/appsec/detector.py</i>"]
+        Comp2["Component 2: Log Correlation Engine<br/>(Sliding Window & Idempotent Deduplication)<br/><i>src/appsec/correlation_engine.py</i>"]
+        Comp3["Component 3: Response Agent<br/>(Policy Defense: IP Block, Rate Limit, Recovery)<br/><i>src/appsec/responder.py</i>"]
+        Comp4["Component 4: Verification Agent<br/>(Loopback Synthetic Probes & Non-Regression)<br/><i>src/appsec/verifier.py</i>"]
+        Comp5["Component 5: Escalation Mechanism<br/>(Bounded Retries & Terminal SOC Alerting)<br/><i>src/appsec/verifier.py</i>"]
+    end
+
+    subgraph MLTier["4. Intelligence & Forensic Enrichment"]
+        RF_Model["Random Forest Classifier<br/>(Network & Auth Anomaly Scoring)<br/><i>models/rf_model.joblib</i>"]
+        AI_Advisor["AI Security Advisor<br/>(MITRE ATT&CK Mapping & Root Cause)<br/><i>src/appsec/ai_advisor.py</i>"]
+        Reporter["Forensic Dossier Generator<br/>(Binary PDF & Full JSON Exports)<br/><i>src/appsec/reporter.py</i>"]
+    end
+
+    subgraph DataTier["5. Persistent Data Store (SQLite WAL Mode)"]
+        DB["ShopSphere & AutoHeal SQLite Database<br/><i>data/shopsphere.db</i>"]
+        Tbl_Events["security_events<br/>(Immutable Ingress Logs)"]
+        Tbl_Incidents["security_incidents<br/>(Correlated Dossiers)"]
+        Tbl_Blocks["blocked_clients<br/>(Dynamic WAF Quarantine with TTL)"]
+        Tbl_Store["Storefront Tables<br/>(users, products, orders, cart_items)"]
+    end
+
+    %% Flow Connections
+    UI_AttackCenter -->|Controlled Attack Execution| ShopAPI
+    UI_Storefront -->|Benign Shopper Requests| ShopAPI
+    ShopAPI --> Middleware
+    Middleware -->|Ingress Request Telemetry| Tbl_Events
+    Middleware -->|Quarantine Check| Tbl_Blocks
+
+    Tbl_Events --> Comp1
+    Comp1 -->|Structured DetectionResult| Comp2
+    Comp1 -.->|Feature Vectors| RF_Model
+    Comp2 -->|Grouped & Deduplicated Incident| Tbl_Incidents
+    Comp2 --> Comp3
+    Comp3 -->|Apply Temporary Quarantine| Tbl_Blocks
+    Comp3 -->|Action Audit & Handoff| Comp4
+
+    Comp4 -->|Perimeter & Availability Probes| Middleware
+    Comp4 -->|Containment Failed| Comp5
+    Comp5 -->|Escalated TTL & Severity| Comp3
+
+    Tbl_Incidents --> Reporter
+    AI_Advisor --> Reporter
+    Reporter --> UI_SOC

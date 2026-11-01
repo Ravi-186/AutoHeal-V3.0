@@ -1,0 +1,43 @@
+%% AutoHeal & ShopSphere Deployment Diagram
+flowchart TB
+    subgraph Host["Developer Workstation / Host OS (Windows Localhost Environment)"]
+        subgraph BrowserProcess["Client Process: Web Browser (Chrome / Edge / Firefox)"]
+            Client_SOC["AutoHeal SOC Dashboard<br/>http://localhost:8000/"]
+            Client_Shop["ShopSphere Storefront<br/>http://localhost:8000/shop"]
+            Client_Streamlit["3D SOC Spatial Canvas<br/>http://localhost:8501/"]
+        end
+
+        subgraph UvicornProcess["Runtime Process 1: Python Uvicorn / FastAPI ASGI (PID 14220)"]
+            FastAPI_Server["FastAPI Web Server<br/>Listening on 0.0.0.0:8000<br/><i>server.py</i>"]
+            MW["AppSecProtectionMiddleware<br/>(Active Starlette In-Memory Rate Tracker)"]
+            Runner["Attack Center Execution Engine<br/><i>src/appsec/security_tester.py</i>"]
+            SecAgents["Active Autonomous Security Pipeline<br/>(Detector, Correlator, Responder, Verifier)"]
+        end
+
+        subgraph StreamlitProcess["Runtime Process 2: Python Streamlit Server (PID 18450)"]
+            Streamlit_Server["Streamlit Web Server<br/>Listening on 0.0.0.0:8501<br/><i>dashboard/app.py</i>"]
+            ThreeJS["Three.js WebGL Engine<br/>(3D Spatial Device Mesh)"]
+        end
+
+        subgraph LocalFileSystem["Local File System: C:\Users\bobba\Documents\AD\autoheal\"]
+            subgraph DB_Dir["data/ Directory"]
+                SQLite_DB["SQLite Database Engine (WAL Mode)<br/><b>data/shopsphere.db</b> (1.08 MB)<br/>Tables: security_events, security_incidents,<br/>blocked_clients, products, users, cart_items"]
+            end
+            subgraph Model_Dir["models/ Directory"]
+                ML_Artifact["Scikit-Learn Random Forest Model<br/><b>models/rf_model.joblib</b><br/>(7 Feature Columns, Pre-Trained Weights)"]
+            end
+            subgraph Doc_Dir["documentation/ Directory"]
+                Diag_Artifacts["PDF & JSON Export Cache<br/><b>documentation/diagrams/</b>"]
+            end
+        end
+    end
+
+    Client_SOC <-->|HTTP / JSON & SSE Stream :8000| FastAPI_Server
+    Client_Shop <-->|HTTP / HTML & REST API :8000| FastAPI_Server
+    Client_Streamlit <-->|WebSockets & HTTP :8501| Streamlit_Server
+
+    FastAPI_Server <--> MW
+    MW <--> Runner
+    MW <--> SecAgents
+    SecAgents <-->|Direct SQLite Connection Pooling| SQLite_DB
+    SecAgents <-->|Joblib Memory Map| ML_Artifact

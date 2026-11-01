@@ -1,0 +1,31 @@
+%% Component 2: Log Correlation Engine Flowchart
+flowchart TD
+    Start([Security Telemetry Ingestion]) --> FetchEvents[Fetch Recent Telemetry Events<br/>Query security_events with sliding window = 60s]
+    FetchEvents --> GroupIP[Group Events by Client IP & Correlation ID]
+    
+    GroupIP --> CheckBurstAuth{Failed Logins >= 4<br/>within 60s window?}
+    CheckBurstAuth -- Yes --> FlagBurst[Correlate Rule AUTH-001<br/>Credential Stuffing / Brute Force<br/>Severity: HIGH | Confidence: 0.95]
+    CheckBurstAuth -- No --> CheckRate{Total Requests >= 25<br/>within 60s window?}
+    
+    FlagBurst --> CheckRate
+    CheckRate -- Yes --> FlagRate[Correlate Rule RATE-001<br/>Denial of Service / Scraping<br/>Severity: MEDIUM | Confidence: 0.90]
+    CheckRate -- No --> CheckMultiStage{Multi-Stage Progression?<br/>AUTH_FAILURE followed by<br/>Admin Probe or Injection}
+    
+    FlagRate --> CheckMultiStage
+    CheckMultiStage -- Yes --> FlagMulti[Correlate Rule CORR-001<br/>Multi-Step Intrusion Sequence<br/>Severity: CRITICAL | Confidence: 0.98]
+    CheckMultiStage -- No --> CheckHealth{Unhandled 500 Errors >= 3?}
+    
+    FlagMulti --> CheckHealth
+    CheckHealth -- Yes --> FlagHealth[Correlate Rule HEALTH-001<br/>Service Health Degradation<br/>Severity: HIGH | Action: RECOVER_SERVICE]
+    CheckHealth -- No --> CollectDetections[Aggregate Correlated Detections]
+    FlagHealth --> CollectDetections
+    
+    CollectDetections --> Deduplicate{Active Incident Exists for<br/>source_ip & rule_id in window?<br/><i>find_active_incident()</i>}
+    
+    Deduplicate -- Yes (Existing) --> UpdateIncident[Idempotent Update:<br/>- Merge new linked_event_ids<br/>- Update updated_at timestamp<br/>- Maximize confidence score<br/>- Preserve original incident_id]
+    
+    Deduplicate -- No (New) --> CreateIncident[Generate New Incident Record:<br/>- ID: INC-2026-XXXX<br/>- Status: UNDER_INVESTIGATION<br/>- Set initial MITRE ATT&CK mapping<br/>- Link initial event IDs]
+    
+    UpdateIncident --> Persist[Commit to SQLite security_incidents]
+    CreateIncident --> Persist
+    Persist --> Output([Dispatch Confirmed Incident to Response Agent])

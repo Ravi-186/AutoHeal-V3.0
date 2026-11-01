@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style> body { margin: 0; padding: 0; background-color: transparent; color: white; font-family: sans-serif; overflow: hidden;} </style>
+  <script src="https://unpkg.com/three"></script>
+  <script src="https://unpkg.com/d3"></script>
+  <script src="https://unpkg.com/3d-force-graph"></script>
+  <script src="https://cdn.jsdelivr.net/npm/streamlit-component-lib@1.3.0/dist/streamlit.js"></script>
+</head>
+<body>
+  <div id="3d-graph" style="width: 100vw; height: 100vh;"></div>
+  
+  <div id="legend" style="position: absolute; bottom: 20px; right: 20px; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 8px; border: 1px solid #333; pointer-events: none; z-index: 100;">
+      <div style="margin-bottom: 5px;"><b>Legend</b></div>
+      <div style="color: #00ffff">● Normal</div>
+      <div style="color: #f85149">● Attacked</div>
+      <div style="color: #d29922">● Isolated (Ring)</div>
+      <div style="color: #8b949e">● Blocked (Double Ring)</div>
+      <div style="color: #3fb950">● Verified Safe</div>
+  </div>
+
+  <script>
+    let graph = null;
+
+    function onDataFromPython(event) {
+        if (event.data.type !== "streamlit:render") return;
+        
+        const currentData = event.data.args;
+        Streamlit.setFrameHeight(currentData.height || 600);
+        try {
+            renderGraph(currentData);
+        } catch (e) {
+            console.error("Error rendering graph:", e);
+        }
+    }
+    
+    function getColor(status) {
+        if (status === 'Isolated') return '#d29922';
+        if (status === 'Blocked') return '#8b949e';
+        if (status === 'Normal') return '#00ffff'; 
+        return '#3fb950';
+    }
+
+    function renderGraph(data) {
+        const nodes = [];
+        const layers = { 'Gateway/Internet': 150, 'Server': 0, 'Laptop/IoT': -150 };
+        
+        nodes.push({ id: 'Internet', group: 'Gateway', layerY: layers['Gateway/Internet'], status: 'Normal' });
+        
+        Object.keys(data.devices).forEach(id => {
+           let role = 'Laptop/IoT';
+           if (id.includes('SRV') || id.includes('DB') || id.includes('DC') || id.includes('FW')) {
+               role = 'Server';
+           }
+           nodes.push({ id: id, group: role, layerY: layers[role], status: data.devices[id] });
+        });
+        
+        const links = [];
+        nodes.forEach(n => {
+           if(n.id !== 'Internet' && n.group === 'Server') {
+               links.push({ source: n.id, target: 'Internet', color: 'rgba(255,255,255,0.1)' });
+           }
+           if(n.group === 'Laptop/IoT') {
+               links.push({ source: n.id, target: 'ENT-APP-SRV-01', color: 'rgba(255,255,255,0.1)' });
+           }
+        });
+        
+        const visiblePath = data.path.slice(0, data.timelineStep);
+        const attackedNodes = new Set();
+        const verifiedSafe = new Set(data.verified_devices || []);
+        
+        visiblePath.forEach(p => {
+            attackedNodes.add(p.from_device);
+            if (p.to_device) attackedNodes.add(p.to_device);
+            
+            if(p.from_device !== p.to_device) {
+                 const existingLink = links.find(l => 
+                     (l.source === p.from_device && l.target === p.to_device) ||
+                     (l.target === p.from_device && l.source === p.to_device)
+                 );
+                 if(!existingLink) {
+                     links.push({ source: p.from_device, target: p.to_device, color: '#f85149', isAttack: true, label: `Step ${p.step}: ${p.reason}` });
+                 } else {
+                     existingLink.color = '#f85149';
+                     existingLink.isAttack = true;
+                     existingLink.label = `Step ${p.step}: ${p.reason}`;
+                 }
+            }
+        });
+        
+        if (!graph) {
+            graph = ForceGraph3D()(document.getElementById('3d-graph'))
+                .backgroundColor('rgba(0,0,0,0)')
+                .nodeRelSize(6)
+                .onNodeClick(node => {
+                    Streamlit.setComponentValue({ type: 'node_click', node: node.id });
+                });
+        }
+        
+        graph.graphData({ nodes, links })
+            .nodeThreeObject(node => {
+                const group = new THREE.Group();
+                
+                let baseColor = node.status !== 'Normal' ? getColor(node.status) : 
+                                (attackedNodes.has(node.id) ? '#f85149' : '#00ffff');
+                                
+                if (verifiedSafe.has(node.id)) {
+                    baseColor = '#3fb950'; // Verified Green
+                }
+                
+                const material = new THREE.MeshLambertMaterial({ color: baseColor, transparent: true, opacity: 0.9 });
+                const sphere = new THREE.Mesh(new THREE.SphereGeometry(6), material);
+                group.add(sphere);
+                
+                if (node.status === 'Isolated' || node.status === 'Blocked') {
+                    const ringGeo = new THREE.TorusGeometry(10, 0.5, 16, 100);
+                    const ringMat = new THREE.MeshBasicMaterial({ color: baseColor, transparent: true, opacity: 0.5 });
+                    const ring = new THREE.Mesh(ringGeo, ringMat);
+                    ring.rotation.x = Math.PI / 2;
+                    group.add(ring);
+                    
+                    if (node.status === 'Blocked') {
+                        const ring2 = new THREE.Mesh(new THREE.TorusGeometry(13, 1, 16, 100), ringMat);
+                        ring2.rotation.x = Math.PI / 2;
+                        group.add(ring2);
+                    }
+                }
+                return group;
+            })
+            .nodeLabel(node => `${node.id} (${node.status})`)
+            .linkLabel(link => link.isAttack ? link.label : '')
+            .linkDirectionalParticles(link => link.isAttack ? 4 : 0)
+            .linkDirectionalParticleSpeed(0.01);
+            
+        // Add Y-force for layers if d3 is loaded
+        if (window.d3) {
+            graph.d3Force('y', window.d3.forceY().y(d => d.layerY).strength(1.5));
+            graph.d3Force('charge').strength(-300); // spread out on x/z
+        }
+    }
+
+    Streamlit.events.addEventListener(Streamlit.RENDER_EVENT, onDataFromPython);
+    Streamlit.setComponentReady();
+  </script>
+</body>
+</html>

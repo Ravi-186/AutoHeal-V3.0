@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 990 280" width="990" height="280">
+    <defs>
+        <filter id="dropShadow" x="-5%" y="-5%" width="110%" height="110%">
+            <feDropShadow dx="2" dy="3" stdDeviation="3" flood-opacity="0.1" />
+        </filter>
+        <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1 L 8 5 L 0 9 z" fill="#0284c7" />
+        </marker>
+        <marker id="arrowRed" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1 L 8 5 L 0 9 z" fill="#dc2626" />
+        </marker>
+        <marker id="arrowGreen" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1 L 8 5 L 0 9 z" fill="#16a34a" />
+        </marker>
+    </defs>
+    <!-- Background -->
+    <rect width="990" height="280" fill="#ffffff" />
+    <rect x="10" y="10" width="970" height="260" rx="12" fill="#fafafa" stroke="#e2e8f0" stroke-width="1.5" />
+    
+    <!-- Title Banner -->
+    <rect x="25" y="25" width="940" height="55" rx="6" fill="#0f172a" />
+    <text x="45" y="52" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#ffffff">Component 2: Log Correlation Engine Flowchart</text>
+    <text x="45" y="68" font-family="Arial, sans-serif" font-size="11" fill="#94a3b8">Time-window grouping, multi-stage attack detection, and idempotent incident deduplication</text>
+    
+    
+    <rect x="40" y="105" width="210" height="140" rx="8" fill="#f0f9ff" stroke="#0284c7" stroke-width="2" filter="url(#dropShadow)" />
+    <text x="56" y="127" font-family="Arial, sans-serif" font-size="13" font-weight="bold" fill="#0f172a">1. Window Aggregation</text>
+    <text x="56" y="141" font-family="Arial, sans-serif" font-size="10" font-style="italic" fill="#64748b">Sliding Time Window (60s)</text>
+    <text x="56" y="147" font-family="Arial, sans-serif" font-size="11" fill="#334155">- Query security_events</text>
+<text x="56" y="165" font-family="Arial, sans-serif" font-size="11" fill="#334155">- Filter since_seconds = 60</text>
+<text x="56" y="183" font-family="Arial, sans-serif" font-size="11" fill="#334155">- Group by client_ip</text>
+<text x="56" y="201" font-family="Arial, sans-serif" font-size="11" fill="#334155">- Group by correlation_id</text>
+
+    
+    <rect x="280" y="105" width="220" height="140" rx="8" fill="#f0fdfa" stroke="#0d9488" stroke-width="2" filter="url(#dropShadow)" />
+    <text x="296" y="127" font-family="Arial, sans-serif" font-size="13" font-weight="bold" fill="#0f172a">2. Pattern Correlation</text>
+    <text x="296" y="141" font-family="Arial, sans-serif" font-size="10" font-style="italic" fill="#64748b">Multi-Event Rules</text>
+    <text x="296" y="147" font-family="Arial, sans-serif" font-size="11" fill="#334155">- AUTH-001: >= 4 Auth Failures</text>
+<text x="296" y="165" font-family="Arial, sans-serif" font-size="11" fill="#334155">- RATE-001: >= 25 Requests/60s</text>
+<text x="296" y="183" font-family="Arial, sans-serif" font-size="11" fill="#334155">- CORR-001: Auth Fail -> Probe</text>
+<text x="296" y="201" font-family="Arial, sans-serif" font-size="11" fill="#334155">- HEALTH-001: >= 3 500 Errors</text>
+
+    
+    <rect x="530" y="105" width="210" height="140" rx="8" fill="#fffbeb" stroke="#d97706" stroke-width="2" filter="url(#dropShadow)" />
+    <text x="546" y="127" font-family="Arial, sans-serif" font-size="13" font-weight="bold" fill="#0f172a">3. Deduplication Check</text>
+    <text x="546" y="141" font-family="Arial, sans-serif" font-size="10" font-style="italic" fill="#64748b">Idempotency Gate</text>
+    <text x="546" y="147" font-family="Arial, sans-serif" font-size="11" fill="#334155">- find_active_incident()</text>
+<text x="546" y="165" font-family="Arial, sans-serif" font-size="11" fill="#334155">- Match source_ip & rule_id</text>
+<text x="546" y="183" font-family="Arial, sans-serif" font-size="11" fill="#334155">- Window: last 300 seconds</text>
+<text x="546" y="201" font-family="Arial, sans-serif" font-size="11" fill="#334155">- Avoid duplicate rows</text>
+
+    
+    <rect x="770" y="105" width="180" height="140" rx="8" fill="#faf5ff" stroke="#7c3aed" stroke-width="2" filter="url(#dropShadow)" />
+    <text x="786" y="127" font-family="Arial, sans-serif" font-size="13" font-weight="bold" fill="#0f172a">4. Incident Dossier</text>
+    <text x="786" y="141" font-family="Arial, sans-serif" font-size="10" font-style="italic" fill="#64748b">Persistence to SQLite</text>
+    <text x="786" y="147" font-family="Arial, sans-serif" font-size="11" fill="#334155">- Merge linked_event_ids</text>
+<text x="786" y="165" font-family="Arial, sans-serif" font-size="11" fill="#334155">- Update updated_at</text>
+<text x="786" y="183" font-family="Arial, sans-serif" font-size="11" fill="#334155">- Set status: UNDER_INVEST.</text>
+<text x="786" y="201" font-family="Arial, sans-serif" font-size="11" fill="#334155">- Handoff to Response</text>
+
+    <path d="M 250 175 L 280 175" stroke="#0284c7" stroke-width="2" marker-end="url(#arrow)" /><path d="M 500 175 L 530 175" stroke="#0d9488" stroke-width="2" marker-end="url(#arrow)" /><path d="M 740 175 L 770 175" stroke="#d97706" stroke-width="2" marker-end="url(#arrow)" />
+</svg>

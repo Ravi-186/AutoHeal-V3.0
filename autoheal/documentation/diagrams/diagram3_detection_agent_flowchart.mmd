@@ -1,0 +1,29 @@
+%% Component 1: Detection Agent Flowchart
+flowchart TD
+    Start([Ingress HTTP Request Telemetry]) --> Normalize[1. Normalize Input<br/>- URL Decode & Lowercase<br/>- Redact Passwords & Tokens<br/>- Extract IP, Path, Headers, Body]
+    
+    Normalize --> Check_SQLi{2. Inspect for SQL Injection?<br/>INJ-001 Patterns:<br/>UNION SELECT, OR '1'='1', --, DROP}
+    Check_SQLi -- Yes --> Flag_SQLi[Flag SQLi Triggered<br/>Severity: CRITICAL<br/>Confidence: 0.98<br/>Action: BLOCK_IP]
+    
+    Check_SQLi -- No --> Check_XSS{3. Inspect for XSS?<br/>XSS-001 Patterns:<br/>&lt;script&gt;, onerror=, onload=, iframe}
+    Check_XSS -- Yes --> Flag_XSS[Flag XSS Triggered<br/>Severity: HIGH<br/>Confidence: 0.94<br/>Action: BLOCK_IP]
+    
+    Check_XSS -- No --> Check_Admin{4. Inspect for Admin Probe?<br/>AUTH-002: /admin endpoint<br/>without admin cryptographic token}
+    Check_Admin -- Yes --> Flag_Admin[Flag Unauthorized Probe<br/>Severity: HIGH<br/>Confidence: 0.99<br/>Action: BLOCK_IP]
+    
+    Check_Admin -- No --> Check_ML{5. Network & Auth Telemetry Available?<br/>failed_logins, connections, bytes_sent}
+    
+    Check_ML -- Yes --> Run_RF[Invoke Random Forest Model<br/><i>models/rf_model.joblib</i><br/>Predict Anomaly Probability Score]
+    Run_RF --> Eval_Threshold{Score >= 0.45 or<br/>Security Guardrail Triggered?}
+    Eval_Threshold -- Yes --> Flag_ML[Flag ML Anomaly Detected<br/>Severity: HIGH<br/>Confidence: Model Score]
+    Eval_Threshold -- No --> Benign[Request Evaluated Normal<br/>Severity: INFO<br/>Triggered: False]
+    
+    Check_ML -- No --> Benign
+
+    Flag_SQLi --> Build_Result[Construct Structured DetectionResult<br/>- rule_id, category, severity, confidence<br/>- evidence, timestamp, why_flagged, recommended_action]
+    Flag_XSS --> Build_Result
+    Flag_Admin --> Build_Result
+    Flag_ML --> Build_Result
+    Benign --> Build_Result
+    
+    Build_Result --> Output([Dispatch to Log Correlation Engine])

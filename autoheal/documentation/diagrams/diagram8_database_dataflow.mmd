@@ -1,0 +1,104 @@
+%% AutoHeal & ShopSphere Database Schema & Data-Flow Diagram
+erDiagram
+    SECURITY_EVENTS {
+        INTEGER id PK
+        TEXT event_id UK
+        TEXT correlation_id
+        TIMESTAMP timestamp
+        TEXT client_ip
+        TEXT user_agent
+        TEXT method
+        TEXT path
+        INTEGER status_code
+        REAL latency_ms
+        TEXT user_id_or_session
+        TEXT event_type
+        TEXT severity
+        TEXT details_json
+        TEXT action_taken
+    }
+
+    SECURITY_INCIDENTS {
+        INTEGER id PK
+        TEXT incident_id UK
+        TEXT rule_id
+        TEXT title
+        TEXT category
+        TEXT severity
+        TEXT status
+        REAL confidence
+        TEXT summary
+        TEXT evidence_json
+        TEXT affected_endpoints_json
+        TEXT source_ip
+        TEXT impact_actual
+        TEXT impact_potential
+        TEXT mitigation_actions_json
+        TEXT remediation_details
+        TEXT regression_tests_json
+        TEXT verification_status
+        TEXT mitre_technique_id
+        TEXT mitre_tactic
+        TEXT mitre_name
+        TEXT recovery_status
+        TIMESTAMP created_at
+        TIMESTAMP updated_at
+    }
+
+    BLOCKED_CLIENTS {
+        INTEGER id PK
+        TEXT client_ip UK
+        TEXT reason
+        TEXT rule_id
+        TEXT incident_id FK
+        TIMESTAMP blocked_at
+        TIMESTAMP expires_at
+        INTEGER is_active
+    }
+
+    VULNERABILITIES {
+        INTEGER id PK
+        TEXT vuln_id UK
+        TEXT title
+        TEXT category
+        TEXT severity
+        TEXT status
+        TEXT file_path
+        TEXT patch_diff
+        TEXT regression_test_code
+        TIMESTAMP created_at
+    }
+
+    USERS {
+        INTEGER id PK
+        TEXT email UK
+        TEXT password_hash
+        TEXT full_name
+        TEXT role
+        TIMESTAMP created_at
+    }
+
+    PRODUCTS {
+        INTEGER id PK
+        TEXT title
+        TEXT category
+        REAL price
+        REAL original_price
+        INTEGER stock
+        REAL rating
+    }
+
+    ORDERS {
+        INTEGER id PK
+        TEXT order_ref UK
+        INTEGER user_id FK
+        TEXT customer_email
+        REAL total_amount
+        TEXT order_status
+        TIMESTAMP created_at
+    }
+
+    SECURITY_EVENTS ||--o{ SECURITY_INCIDENTS : "correlated via linked_event_ids"
+    SECURITY_INCIDENTS ||--o{ BLOCKED_CLIENTS : "triggers dynamic quarantine"
+    USERS ||--o{ ORDERS : "places customer orders"
+    SECURITY_INCIDENTS ||--o{ VULNERABILITIES : "links to patch remediation"

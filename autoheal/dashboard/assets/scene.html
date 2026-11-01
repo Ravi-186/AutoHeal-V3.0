@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AutoHeal 3D Network</title>
+    <style>
+        body { margin: 0; padding: 0; background-color: #030a16; overflow: hidden; }
+        canvas { display: block; width: 100vw; height: 100vh; }
+    </style>
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <script>
+        // 1. Scene Setup
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x020510);
+        scene.fog = new THREE.FogExp2(0x020510, 0.0012);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 400;
+        
+        // Position sphere CENTERED
+        const networkGroup = new THREE.Group();
+        networkGroup.position.set(0, 0, 0);
+        scene.add(networkGroup);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        document.body.appendChild(renderer.domElement);
+
+        // 2. Generate Network Sphere
+        const radius = 180;
+        const nodeCount = 500; // More nodes for density
+        const nodes = [];
+        const nodePositions = new Float32Array(nodeCount * 3);
+        const nodeColors = new Float32Array(nodeCount * 3);
+        
+        const threatColor = new THREE.Color(0xff0044); // Neon Red
+        const isolatedColor = new THREE.Color(0x111122); // Dim
+        
+        // Colors palette: Deep blues, cyans, electric purples
+        function getRandomPaletteColor() {
+            const hue = Math.random() > 0.5 ? 
+                Math.random() * 0.1 + 0.5 : // Blue/Cyan (0.5 - 0.6)
+                Math.random() * 0.1 + 0.7; // Purple/Magenta (0.7 - 0.8)
+            return new THREE.Color().setHSL(hue, 1.0, 0.6);
+        }
+
+        const phi = Math.PI * (3 - Math.sqrt(5)); 
+        for (let i = 0; i < nodeCount; i++) {
+            const y = 1 - (i / (nodeCount - 1)) * 2; 
+            const r = Math.sqrt(1 - y * y);
+            const theta = phi * i;
+
+            const x = Math.cos(theta) * r;
+            const z = Math.sin(theta) * r;
+
+            const pos = new THREE.Vector3(x * radius, y * radius, z * radius);
+            pos.add(new THREE.Vector3((Math.random()-0.5)*15, (Math.random()-0.5)*15, (Math.random()-0.5)*15));
+
+            const baseColor = getRandomPaletteColor();
+
+            nodes.push({
+                index: i,
+                pos: pos,
+                baseColor: baseColor,
+                state: 'NORMAL',
+                connections: []
+            });
+
+            nodePositions[i*3] = pos.x;
+            nodePositions[i*3+1] = pos.y;
+            nodePositions[i*3+2] = pos.z;
+
+            nodeColors[i*3] = baseColor.r;
+            nodeColors[i*3+1] = baseColor.g;
+            nodeColors[i*3+2] = baseColor.b;
+        }
+
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.BufferAttribute(nodePositions, 3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(nodeColors, 3));
+
+        const material = new THREE.PointsMaterial({
+            size: 4,
+            vertexColors: true,
+            blending: THREE.AdditiveBlending,
+            transparent: true,
+            opacity: 0.9,
+            depthWrite: false
+        });
+
+        const points = new THREE.Points(geometry, material);
+        networkGroup.add(points);
+
+        // 3. Generate Connections
+        const lineMaterial = new THREE.LineBasicMaterial({
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.25,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+
+        const lineGeometry = new THREE.BufferGeometry();
+        let linePositions = [];
+        let lineColorsArray = [];
+        
+        const maxDistance = 55;
+        for (let i = 0; i < nodeCount; i++) {
+            for (let j = i + 1; j < nodeCount; j++) {
+                if (nodes[i].pos.distanceTo(nodes[j].pos) < maxDistance) {
+                    if (nodes[i].connections.length < 6 && nodes[j].connections.length < 6) {
+                        nodes[i].connections.push(j);
+                        nodes[j].connections.push(i);
+                        
+                        linePositions.push(
+                            nodes[i].pos.x, nodes[i].pos.y, nodes[i].pos.z,
+                            nodes[j].pos.x, nodes[j].pos.y, nodes[j].pos.z
+                        );
+                        
+                        lineColorsArray.push(
+                            nodes[i].baseColor.r, nodes[i].baseColor.g, nodes[i].baseColor.b,
+                            nodes[j].baseColor.r, nodes[j].baseColor.g, nodes[j].baseColor.b
+                        );
+                    }
+                }
+            }
+        }
+
+        lineGeometry.setAttribute('position', new THREE.Float32BufferAttribute(linePositions, 3));
+        lineGeometry.setAttribute('color', new THREE.Float32BufferAttribute(lineColorsArray, 3));
+        const lines = new THREE.LineSegments(lineGeometry, lineMaterial);
+        networkGroup.add(lines);
+
+        // 4. Vibrant Data Packets
+        const packetCount = 200;
+        const packets = [];
+        const packetGeo = new THREE.BufferGeometry();
+        const packetPos = new Float32Array(packetCount * 3);
+        const packetColors = new Float32Array(packetCount * 3);
+        
+        for(let i=0; i<packetCount; i++) {
+            const startNode = nodes[Math.floor(Math.random() * nodeCount)];
+            const endIdx = startNode.connections[Math.floor(Math.random() * startNode.connections.length)];
+            const endNode = endIdx !== undefined ? nodes[endIdx] : startNode;
+            
+            const color = getRandomPaletteColor();
+            packets.push({
+                start: startNode.pos.clone(),
+                end: endNode.pos.clone(),
+                progress: Math.random(),
+                speed: 0.005 + Math.random() * 0.015,
+                color: color
+            });
+            
+            packetPos[i*3] = startNode.pos.x;
+            packetPos[i*3+1] = startNode.pos.y;
+            packetPos[i*3+2] = startNode.pos.z;
+            
+            packetColors[i*3] = color.r;
+            packetColors[i*3+1] = color.g;
+            packetColors[i*3+2] = color.b;
+        }
+        
+        packetGeo.setAttribute('position', new THREE.BufferAttribute(packetPos, 3));
+        packetGeo.setAttribute('color', new THREE.BufferAttribute(packetColors, 3));
+        
+        const packetMat = new THREE.PointsMaterial({
+            size: 6,
+            vertexColors: true,
+            transparent: true,
+            opacity: 1.0,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+        const packetPoints = new THREE.Points(packetGeo, packetMat);
+        networkGroup.add(packetPoints);
+
+        // 5. Ambient Holographic Rings
+        const ringGeo1 = new THREE.TorusGeometry(radius + 30, 0.5, 32, 100);
+        const ringMat1 = new THREE.LineBasicMaterial({ color: 0x00f0ff, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending });
+        const ring1 = new THREE.LineLoop(ringGeo1, ringMat1);
+        ring1.rotation.x = Math.PI / 2;
+        networkGroup.add(ring1);
+        
+        const ringGeo2 = new THREE.TorusGeometry(radius + 50, 0.5, 32, 100);
+        const ringMat2 = new THREE.LineBasicMaterial({ color: 0xaa00ff, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending });
+        const ring2 = new THREE.LineLoop(ringGeo2, ringMat2);
+        ring2.rotation.y = Math.PI / 4;
+        networkGroup.add(ring2);
+
+        // Ambient core glow
+        const coreGeo = new THREE.SphereGeometry(radius * 0.8, 32, 32);
+        const coreMat = new THREE.MeshBasicMaterial({ color: 0x03102a, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending });
+        const coreSphere = new THREE.Mesh(coreGeo, coreMat);
+        networkGroup.add(coreSphere);
+
+        // 6. Threat Simulation Logic
+        function updateNodeColor(index, color) {
+            const colors = points.geometry.attributes.color.array;
+            colors[index*3] = color.r;
+            colors[index*3+1] = color.g;
+            colors[index*3+2] = color.b;
+            points.geometry.attributes.color.needsUpdate = true;
+        }
+
+        function triggerThreat() {
+            const normalNodes = nodes.filter(n => n.state === 'NORMAL');
+            if (normalNodes.length === 0) return;
+            
+            const target = normalNodes[Math.floor(Math.random() * normalNodes.length)];
+            target.state = 'THREAT';
+            updateNodeColor(target.index, threatColor);
+            
+            // Pulse spreading
+            setTimeout(() => {
+                target.connections.forEach(connIdx => {
+                    if(nodes[connIdx].state === 'NORMAL') {
+                        updateNodeColor(connIdx, new THREE.Color(0xff4444));
+                        setTimeout(() => {
+                            if(nodes[connIdx].state === 'NORMAL') updateNodeColor(connIdx, nodes[connIdx].baseColor);
+                        }, 600);
+                    }
+                });
+            }, 800);
+            
+            // Isolate & Heal
+            setTimeout(() => {
+                target.state = 'ISOLATED';
+                updateNodeColor(target.index, isolatedColor);
+                
+                const healRingGeo = new THREE.RingGeometry(5, 25, 32);
+                const healRingMat = new THREE.MeshBasicMaterial({
+                    color: 0x00ffff,
+                    transparent: true,
+                    opacity: 0.9,
+                    side: THREE.DoubleSide,
+                    blending: THREE.AdditiveBlending,
+                    depthWrite: false
+                });
+                const healRing = new THREE.Mesh(healRingGeo, healRingMat);
+                healRing.position.copy(target.pos);
+                healRing.lookAt(new THREE.Vector3(0,0,0));
+                networkGroup.add(healRing);
+                
+                let scale = 1;
+                const healAnim = setInterval(() => {
+                    scale += 0.08;
+                    healRing.scale.set(scale, scale, 1);
+                    healRing.material.opacity -= 0.04;
+                    if(healRing.material.opacity <= 0) {
+                        networkGroup.remove(healRing);
+                        clearInterval(healAnim);
+                    }
+                }, 30);
+            }, 2500);
+        }
+
+        setInterval(triggerThreat, 5000);
+
+        // 7. Interaction
+        let mouseX = 0, mouseY = 0, targetX = 0, targetY = 0;
+        
+        document.addEventListener('mousemove', (event) => {
+            mouseX = (event.clientX - window.innerWidth / 2) * 0.0006;
+            mouseY = (event.clientY - window.innerHeight / 2) * 0.0006;
+        });
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            networkGroup.position.set(0, 0, 0); // Always centered
+        });
+
+        // 8. Loop
+        function animate() {
+            requestAnimationFrame(animate);
+
+            networkGroup.rotation.y += 0.0015;
+            networkGroup.rotation.x += 0.0005;
+            ring1.rotation.z -= 0.002;
+            ring2.rotation.x += 0.0015;
+
+            const pPositions = packetPoints.geometry.attributes.position.array;
+            for(let i=0; i<packetCount; i++) {
+                const p = packets[i];
+                p.progress += p.speed;
+                if(p.progress >= 1) {
+                    p.progress = 0;
+                    const startNode = nodes[Math.floor(Math.random() * nodeCount)];
+                    const endIdx = startNode.connections[Math.floor(Math.random() * startNode.connections.length)];
+                    const endNode = endIdx !== undefined ? nodes[endIdx] : startNode;
+                    p.start.copy(startNode.pos);
+                    p.end.copy(endNode.pos);
+                }
+                const currentPos = new THREE.Vector3().lerpVectors(p.start, p.end, p.progress);
+                pPositions[i*3] = currentPos.x;
+                pPositions[i*3+1] = currentPos.y;
+                pPositions[i*3+2] = currentPos.z;
+            }
+            packetPoints.geometry.attributes.position.needsUpdate = true;
+
+            camera.position.x += (mouseX * 150 - camera.position.x) * 0.05;
+            camera.position.y += (-mouseY * 150 - camera.position.y) * 0.05;
+            camera.lookAt(scene.position);
+
+            renderer.render(scene, camera);
+        }
+        animate();
+    </script>
+</body>
+</html>

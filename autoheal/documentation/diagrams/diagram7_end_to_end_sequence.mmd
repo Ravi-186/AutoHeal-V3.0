@@ -1,0 +1,58 @@
+%% AutoHeal End-to-End Attack-to-Healing Sequence Diagram
+sequenceDiagram
+    autonumber
+    actor User as SOC Operator
+    participant UI as AutoHeal Website (Port 8000)
+    participant Runner as Attack Center Runner
+    participant Gateway as AppSec Middleware
+    participant Shop as ShopSphere Storefront
+    participant Det as Detection Agent
+    participant Corr as Correlation Engine
+    participant Resp as Response Agent
+    participant Verif as Verification Agent
+    participant DB as SQLite (shopsphere.db)
+    participant Rep as Forensic Reporter
+
+    User->>UI: Select Scenario (e.g. Failed Logins) & Click 'Start Test'
+    UI->>Runner: POST /api/security/test/run {scenario: 'failed_logins', attempts: 5}
+    
+    loop Attempts 1 to 4 (Burst Phase)
+        Runner->>Gateway: POST /api/shop/auth/login (Invalid Credentials, Client IP: 198.51.100.22)
+        Gateway->>Shop: Forward Request
+        Shop-->>Gateway: HTTP 401 Unauthorized
+        Gateway->>DB: INSERT INTO security_events (status_code=401, type='AUTH_FAILURE')
+        Gateway-->>Runner: HTTP 401 Unauthorized
+    end
+
+    Note over Gateway,Corr: 4th Auth Failure triggers Threshold Correlation
+    Gateway->>Det: Trigger Telemetry Analysis
+    Det->>Corr: Group events by Client IP across 60s sliding window
+    Corr->>DB: upsert_security_incident (rule_id='AUTH-001', IP='198.51.100.22')
+    DB-->>Corr: Incident Created (INC-2026-XXXX)
+    Corr->>Resp: Handoff Incident for Defensive Response
+
+    Resp->>DB: INSERT INTO blocked_clients (IP='198.51.100.22', TTL=180s)
+    Resp->>Verif: Handoff Incident for Verification
+
+    par Verification Probe 1 (Attacker IP)
+        Verif->>Gateway: GET /api/shop/auth/login (X-Forwarded-For: 198.51.100.22)
+        Gateway->>DB: Check is_client_blocked(198.51.100.22)
+        DB-->>Gateway: Blocked = True
+        Gateway-->>Verif: HTTP 403 Forbidden (Perimeter Quarantine Verified)
+    and Verification Probe 2 (Clean Benign IP)
+        Verif->>Gateway: GET /api/shop/products (X-Forwarded-For: 192.0.2.100)
+        Gateway->>Shop: Forward Request
+        Shop-->>Gateway: HTTP 200 OK
+        Gateway-->>Verif: HTTP 200 OK (Storefront Availability Preserved)
+    end
+
+    Verif->>DB: UPDATE security_incidents SET status='CONTAINED', verification='VERIFIED_CONTAINED'
+    
+    Runner->>UI: Stream Test Traces & Verification Outcome (SSE data)
+    UI-->>User: Display Green 'VERIFIED_CONTAINED' Badge & Incident Link
+    
+    User->>UI: Click 'Download PDF Report'
+    UI->>Rep: GET /api/security/incidents/INC-2026-XXXX/export?format=pdf
+    Rep->>DB: Fetch Incident Dossier & Linked Telemetry Events
+    DB-->>Rep: Incident & Event Evidence
+    Rep-->>User: Binary Download: INC-2026-XXXX_report.pdf (2-Page Forensic Dossier)

@@ -1,0 +1,23 @@
+%% Component 3: Response Agent Flowchart
+flowchart TD
+    Start([Confirmed Incident Received]) --> CheckStatus{Incident State Check<br/>Is Dry-Run Mode Active?}
+    
+    CheckStatus -- Yes --> DryRun[Record Simulated Proposal Only<br/>Action: PROPOSED_ONLY<br/>Audit Trace Generated]
+    
+    CheckStatus -- No --> PolicyLookup[Lookup Defensive Policy Rule<br/><i>POLICY_RULES table</i><br/>Determine Action, TTL, Approval Requirements]
+    
+    PolicyLookup --> DispatchAction{Defensive Action Type}
+    
+    DispatchAction -- BLOCK_IP --> EnforceBlock[Dynamic WAF Quarantine<br/>- Insert into blocked_clients<br/>- Set TTL = 180s - 300s<br/>- Starlette Middleware Drops Requests with HTTP 403]
+    
+    DispatchAction -- RATE_LIMIT --> EnforceRate[Rate Limit Throttle<br/>- Update Sliding Window Token Bucket<br/>- Starlette Middleware Drops Burst with HTTP 429]
+    
+    DispatchAction -- RECOVER_SERVICE --> EnforceHeal[Autonomous Self-Healing<br/>- Reset Corrupted Connection Pools<br/>- Re-seed Baseline Storefront Data<br/>- Recover Nominal Transaction State]
+    
+    EnforceBlock --> AuditTrace[Generate Comprehensive Audit Log<br/>- Record action, target, timestamp, TTL<br/>- Measure execution latency (ms)<br/>- Append to incident mitigation_actions]
+    EnforceRate --> AuditTrace
+    EnforceHeal --> AuditTrace
+    
+    AuditTrace --> TransitionState[Update Incident Status in SQLite:<br/>status = 'RESPONSE_ATTEMPTED'<br/>recovery_status = 'MITIGATION_ENACTED']
+    
+    TransitionState --> Handoff([Immediate Handoff to Component 4: Verification Agent])

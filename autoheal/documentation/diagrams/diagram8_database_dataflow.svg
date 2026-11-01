@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 990 420" width="990" height="420">
+    <defs>
+        <filter id="dropShadow" x="-5%" y="-5%" width="110%" height="110%">
+            <feDropShadow dx="2" dy="3" stdDeviation="3" flood-opacity="0.1" />
+        </filter>
+        <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1 L 8 5 L 0 9 z" fill="#0284c7" />
+        </marker>
+        <marker id="arrowRed" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1 L 8 5 L 0 9 z" fill="#dc2626" />
+        </marker>
+        <marker id="arrowGreen" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1 L 8 5 L 0 9 z" fill="#16a34a" />
+        </marker>
+    </defs>
+    <!-- Background -->
+    <rect width="990" height="420" fill="#ffffff" />
+    <rect x="10" y="10" width="970" height="400" rx="12" fill="#fafafa" stroke="#e2e8f0" stroke-width="1.5" />
+    
+    <!-- Title Banner -->
+    <rect x="25" y="25" width="940" height="55" rx="6" fill="#0f172a" />
+    <text x="45" y="52" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#ffffff">AutoHeal & ShopSphere — Database & Data-Flow Diagram</text>
+    <text x="45" y="68" font-family="Arial, sans-serif" font-size="11" fill="#94a3b8">Actual SQLite schemas for security_events, security_incidents, and blocked_clients with relational linkages</text>
+    
+    
+    <rect x="40" y="105" width="280" height="280" rx="8" fill="#f0f9ff" stroke="#0284c7" stroke-width="2" filter="url(#dropShadow)" />
+    <text x="56" y="127" font-family="Arial, sans-serif" font-size="13" font-weight="bold" fill="#0f172a">Table: security_events</text>
+    <text x="56" y="141" font-family="Arial, sans-serif" font-size="10" font-style="italic" fill="#64748b">Immutable Ingress HTTP Telemetry</text>
+    <text x="56" y="147" font-family="Arial, sans-serif" font-size="11" fill="#334155">- id: INTEGER PRIMARY KEY</text>
+<text x="56" y="165" font-family="Arial, sans-serif" font-size="11" fill="#334155">- event_id: TEXT UNIQUE (EVT-XXXX)</text>
+<text x="56" y="183" font-family="Arial, sans-serif" font-size="11" fill="#334155">- correlation_id: TEXT (corr-XXXX)</text>
+<text x="56" y="201" font-family="Arial, sans-serif" font-size="11" fill="#334155">- timestamp: TIMESTAMP (UTC)</text>
+<text x="56" y="219" font-family="Arial, sans-serif" font-size="11" fill="#334155">- client_ip: TEXT (198.51.100.X)</text>
+<text x="56" y="237" font-family="Arial, sans-serif" font-size="11" fill="#334155">- method: TEXT (GET/POST/PUT)</text>
+<text x="56" y="255" font-family="Arial, sans-serif" font-size="11" fill="#334155">- path: TEXT (/api/shop/...)</text>
+<text x="56" y="273" font-family="Arial, sans-serif" font-size="11" fill="#334155">- status_code: INTEGER (200, 401, 403)</text>
+<text x="56" y="291" font-family="Arial, sans-serif" font-size="11" fill="#334155">- latency_ms: REAL (ms elapsed)</text>
+<text x="56" y="309" font-family="Arial, sans-serif" font-size="11" fill="#334155">- event_type: TEXT (AUTH_FAILURE, ...)</text>
+<text x="56" y="327" font-family="Arial, sans-serif" font-size="11" fill="#334155">- severity: TEXT (INFO, HIGH, CRITICAL)</text>
+<text x="56" y="345" font-family="Arial, sans-serif" font-size="11" fill="#334155">- action_taken: TEXT (ALLOWED, BLOCKED)</text>
+
+    
+    <rect x="350" y="105" width="290" height="280" rx="8" fill="#faf5ff" stroke="#7c3aed" stroke-width="2" filter="url(#dropShadow)" />
+    <text x="366" y="127" font-family="Arial, sans-serif" font-size="13" font-weight="bold" fill="#0f172a">Table: security_incidents</text>
+    <text x="366" y="141" font-family="Arial, sans-serif" font-size="10" font-style="italic" fill="#64748b">Correlated Forensic Dossiers</text>
+    <text x="366" y="147" font-family="Arial, sans-serif" font-size="11" fill="#334155">- id: INTEGER PRIMARY KEY</text>
+<text x="366" y="165" font-family="Arial, sans-serif" font-size="11" fill="#334155">- incident_id: TEXT UNIQUE (INC-2026-X)</text>
+<text x="366" y="183" font-family="Arial, sans-serif" font-size="11" fill="#334155">- rule_id: TEXT (AUTH-001, INJ-001)</text>
+<text x="366" y="201" font-family="Arial, sans-serif" font-size="11" fill="#334155">- category: TEXT (Credential Stuffing)</text>
+<text x="366" y="219" font-family="Arial, sans-serif" font-size="11" fill="#334155">- severity: TEXT (HIGH / CRITICAL)</text>
+<text x="366" y="237" font-family="Arial, sans-serif" font-size="11" fill="#334155">- status: TEXT (CONTAINED, ESCALATED)</text>
+<text x="366" y="255" font-family="Arial, sans-serif" font-size="11" fill="#334155">- confidence: REAL (0.0 - 1.0)</text>
+<text x="366" y="273" font-family="Arial, sans-serif" font-size="11" fill="#334155">- evidence_json: TEXT (linked_event_ids)</text>
+<text x="366" y="291" font-family="Arial, sans-serif" font-size="11" fill="#334155">- affected_endpoints_json: TEXT</text>
+<text x="366" y="309" font-family="Arial, sans-serif" font-size="11" fill="#334155">- verification_status: TEXT (VERIFIED)</text>
+<text x="366" y="327" font-family="Arial, sans-serif" font-size="11" fill="#334155">- mitre_technique_id: TEXT (T1110.001)</text>
+<text x="366" y="345" font-family="Arial, sans-serif" font-size="11" fill="#334155">- recovery_status: TEXT (NOMINAL)</text>
+
+    
+    <rect x="670" y="105" width="280" height="280" rx="8" fill="#fef2f2" stroke="#dc2626" stroke-width="2" filter="url(#dropShadow)" />
+    <text x="686" y="127" font-family="Arial, sans-serif" font-size="13" font-weight="bold" fill="#0f172a">Table: blocked_clients</text>
+    <text x="686" y="141" font-family="Arial, sans-serif" font-size="10" font-style="italic" fill="#64748b">Dynamic Perimeter WAF Blocklist</text>
+    <text x="686" y="147" font-family="Arial, sans-serif" font-size="11" fill="#334155">- id: INTEGER PRIMARY KEY</text>
+<text x="686" y="165" font-family="Arial, sans-serif" font-size="11" fill="#334155">- client_ip: TEXT UNIQUE (Quarantined)</text>
+<text x="686" y="183" font-family="Arial, sans-serif" font-size="11" fill="#334155">- reason: TEXT (Triggering rule summary)</text>
+<text x="686" y="201" font-family="Arial, sans-serif" font-size="11" fill="#334155">- rule_id: TEXT (INJ-001, AUTH-001)</text>
+<text x="686" y="219" font-family="Arial, sans-serif" font-size="11" fill="#334155">- incident_id: TEXT FK</text>
+<text x="686" y="237" font-family="Arial, sans-serif" font-size="11" fill="#334155">- blocked_at: TIMESTAMP DEFAULT NOW</text>
+<text x="686" y="255" font-family="Arial, sans-serif" font-size="11" fill="#334155">- expires_at: TIMESTAMP (Sliding TTL)</text>
+<text x="686" y="273" font-family="Arial, sans-serif" font-size="11" fill="#334155">- is_active: INTEGER (1 = blocked, 0 = exp.)</text>
+<text x="686" y="291" font-family="Arial, sans-serif" font-size="11" fill="#334155"></text>
+<text x="686" y="309" font-family="Arial, sans-serif" font-size="11" fill="#334155">Auto-Expiry Logic: Checked in middleware.</text>
+<text x="686" y="327" font-family="Arial, sans-serif" font-size="11" fill="#334155">Expired blocks set is_active=0 dynamically.</text>
+
+    <path d="M 320 220 L 350 220" stroke="#0284c7" stroke-width="2" marker-end="url(#arrow)" /><path d="M 640 220 L 670 220" stroke="#7c3aed" stroke-width="2" marker-end="url(#arrow)" />
+</svg>

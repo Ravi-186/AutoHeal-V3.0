@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 990 280" width="990" height="280">
+    <defs>
+        <filter id="dropShadow" x="-5%" y="-5%" width="110%" height="110%">
+            <feDropShadow dx="2" dy="3" stdDeviation="3" flood-opacity="0.1" />
+        </filter>
+        <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1 L 8 5 L 0 9 z" fill="#0284c7" />
+        </marker>
+        <marker id="arrowRed" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1 L 8 5 L 0 9 z" fill="#dc2626" />
+        </marker>
+        <marker id="arrowGreen" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1 L 8 5 L 0 9 z" fill="#16a34a" />
+        </marker>
+    </defs>
+    <!-- Background -->
+    <rect width="990" height="280" fill="#ffffff" />
+    <rect x="10" y="10" width="970" height="260" rx="12" fill="#fafafa" stroke="#e2e8f0" stroke-width="1.5" />
+    
+    <!-- Title Banner -->
+    <rect x="25" y="25" width="940" height="55" rx="6" fill="#0f172a" />
+    <text x="45" y="52" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#ffffff">Component 4 & 5: Verification & Escalation Flowchart</text>
+    <text x="45" y="68" font-family="Arial, sans-serif" font-size="11" fill="#94a3b8">Dual-probe verification (containment + availability), bounded escalation retries, and terminal SOC dispatch</text>
+    
+    
+    <rect x="40" y="105" width="220" height="140" rx="8" fill="#f0f9ff" stroke="#0284c7" stroke-width="2" filter="url(#dropShadow)" />
+    <text x="56" y="127" font-family="Arial, sans-serif" font-size="13" font-weight="bold" fill="#0f172a">1. Perimeter Containment Probe</text>
+    <text x="56" y="141" font-family="Arial, sans-serif" font-size="10" font-style="italic" fill="#64748b">Malicious Attacker Testing</text>
+    <text x="56" y="147" font-family="Arial, sans-serif" font-size="11" fill="#334155">- Issue synthetic HTTP probe</text>
+<text x="56" y="165" font-family="Arial, sans-serif" font-size="11" fill="#334155">- Spoof attacker X-Forwarded-For</text>
+<text x="56" y="183" font-family="Arial, sans-serif" font-size="11" fill="#334155">- Inspect HTTP response code</text>
+<text x="56" y="201" font-family="Arial, sans-serif" font-size="11" fill="#334155">- Expected: 403 Forbidden</text>
+
+    
+    <rect x="290" y="105" width="220" height="140" rx="8" fill="#f0fdfa" stroke="#0d9488" stroke-width="2" filter="url(#dropShadow)" />
+    <text x="306" y="127" font-family="Arial, sans-serif" font-size="13" font-weight="bold" fill="#0f172a">2. Availability Non-Regression</text>
+    <text x="306" y="141" font-family="Arial, sans-serif" font-size="10" font-style="italic" fill="#64748b">Benign Shopper Testing</text>
+    <text x="306" y="147" font-family="Arial, sans-serif" font-size="11" fill="#334155">- Issue clean shopper HTTP probe</text>
+<text x="306" y="165" font-family="Arial, sans-serif" font-size="11" fill="#334155">- Target: /api/shop/products</text>
+<text x="306" y="183" font-family="Arial, sans-serif" font-size="11" fill="#334155">- Inspect HTTP response code</text>
+<text x="306" y="201" font-family="Arial, sans-serif" font-size="11" fill="#334155">- Expected: 200 OK (Preserved)</text>
+
+    
+    <rect x="540" y="105" width="200" height="140" rx="8" fill="#f0fdf4" stroke="#16a34a" stroke-width="2" filter="url(#dropShadow)" />
+    <text x="556" y="127" font-family="Arial, sans-serif" font-size="13" font-weight="bold" fill="#0f172a">3. Verification Decision</text>
+    <text x="556" y="141" font-family="Arial, sans-serif" font-size="10" font-style="italic" fill="#64748b">Dual Invariant Gate</text>
+    <text x="556" y="147" font-family="Arial, sans-serif" font-size="11" fill="#334155">IF 403 AND 200:</text>
+<text x="556" y="165" font-family="Arial, sans-serif" font-size="11" fill="#334155">- status = 'CONTAINED'</text>
+<text x="556" y="183" font-family="Arial, sans-serif" font-size="11" fill="#334155">- verification = 'VERIFIED'</text>
+<text x="556" y="201" font-family="Arial, sans-serif" font-size="11" fill="#334155">ELSE:</text>
+<text x="556" y="219" font-family="Arial, sans-serif" font-size="11" fill="#334155">- Trigger Escalation Mechanism</text>
+
+    
+    <rect x="770" y="105" width="180" height="140" rx="8" fill="#fef2f2" stroke="#dc2626" stroke-width="2" filter="url(#dropShadow)" />
+    <text x="786" y="127" font-family="Arial, sans-serif" font-size="13" font-weight="bold" fill="#0f172a">4. Escalation Mechanism</text>
+    <text x="786" y="141" font-family="Arial, sans-serif" font-size="10" font-style="italic" fill="#64748b">Bounded Retries (Max 3)</text>
+    <text x="786" y="147" font-family="Arial, sans-serif" font-size="11" fill="#334155">- If retries < 3: Double TTL,</text>
+<text x="786" y="165" font-family="Arial, sans-serif" font-size="11" fill="#334155">  elevate to CRITICAL, retry</text>
+<text x="786" y="183" font-family="Arial, sans-serif" font-size="11" fill="#334155">- If retries >= 3: Terminate,</text>
+<text x="786" y="201" font-family="Arial, sans-serif" font-size="11" fill="#334155">  status: ESCALATION_REQ.</text>
+
+    <path d="M 260 175 L 290 175" stroke="#0284c7" stroke-width="2" marker-end="url(#arrow)" /><path d="M 510 175 L 540 175" stroke="#0d9488" stroke-width="2" marker-end="url(#arrow)" /><path d="M 740 175 L 770 175" stroke="#dc2626" stroke-width="2" marker-end="url(#arrowRed)" />
+</svg>

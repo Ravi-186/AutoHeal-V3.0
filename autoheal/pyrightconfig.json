@@ -1,0 +1,16 @@
+{
+  "include": [
+    "."
+  ],
+  "extraPaths": [
+    ".",
+    "dashboard",
+    "src",
+    "shopsphere"
+  ],
+  "reportMissingImports": false,
+  "reportOptionalCall": false,
+  "reportOptionalMemberAccess": false,
+  "reportAttributeAccessIssue": false,
+  "reportGeneralTypeIssues": false
+}
