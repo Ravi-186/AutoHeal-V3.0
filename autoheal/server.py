@@ -93,10 +93,14 @@ from src.appsec.middleware import AppSecProtectionMiddleware
 from src.appsec.api import router as appsec_router
 from src.appsec.soar_api import router as soar_router
 from src.appsec.self_healing_api import router as self_healing_router
+from src.appsec.threat_topology_api import router as threat_topology_router
+from src.appsec.copilot_api import router as copilot_router
 app.add_middleware(AppSecProtectionMiddleware)
 app.include_router(appsec_router)
 app.include_router(soar_router)
 app.include_router(self_healing_router)
+app.include_router(threat_topology_router)
+app.include_router(copilot_router)
 
 # --- Web & Health Endpoints ---
 @app.get("/shop", summary="ShopSphere E-Commerce Live Application")
@@ -110,6 +114,20 @@ async def serve_shopsphere(request: Request):
 async def serve_dashboard(request: Request):
     if not templates:
         return JSONResponse({"status": "healthy", "service": "AutoHeal API", "docs": "/api/docs"})
+    return templates.TemplateResponse(request=request, name="index.html")
+
+@app.get("/threat-topology", summary="3D Threat Topology Environment")
+async def serve_threat_topology(request: Request):
+    """Direct route serving the 3D Threat Topology spatial environment."""
+    if not templates:
+        return JSONResponse({"status": "healthy", "service": "AutoHeal 3D Threat Topology"})
+    return templates.TemplateResponse(request=request, name="index.html")
+
+@app.get("/soc-copilot", summary="AI SOC Copilot Workspace")
+async def serve_soc_copilot(request: Request):
+    """Direct route serving the AI SOC Copilot analyst workspace."""
+    if not templates:
+        return JSONResponse({"status": "healthy", "service": "AutoHeal AI SOC Copilot"})
     return templates.TemplateResponse(request=request, name="index.html")
 
 @app.get("/api/health", response_model=HealthResponse, summary="Production Service Health Check")

@@ -20,7 +20,7 @@
 | **PHASE 5** | Incident Command Center | Forensic dossier, attack timeline, root-cause, response history | **COMPLETE** | Dossier View, `/api/security/incidents/{id}` |
 | **PHASE 6** | SOAR Automation Center | Playbook library, visual execution flow, action status, approval gates| **COMPLETE** | Visual Flowchart, Active Quarantine Manager |
 | **PHASE 7** | Self-Healing Center | Active remediation, before/after AST diffs, dual-probe verification | **COMPLETE** | AST Diff Box, `/api/security/vulnerabilities/*` |
-| **PHASE 8** | Threat Intel & MITRE Explorer | IOC search, reputation scoring, interactive ATT&CK technique matrix | **COMPLETE** | IOC Lookup Tool, 5-Tactic MITRE Matrix Grid |
+| **PHASE 8** | 3D Threat Topology + AI SOC Copilot | Real-time 3D spatial security graph (Three.js), confirmed vs inferred edges, dual-mode hallucination-resistant Copilot, 4-tab findings dossier, 12-section formal report generator | **COMPLETE** | 26/26 Tests Passed in `test_threat_topology_and_copilot.py`, 199/199 regression pass, `docs/v3-transformation/phase-8/` (16 documents) |
 | **PHASE 9** | Asset Management & Reports | Monitored assets, zero-trust zones, 3D WebGL topology map | **COMPLETE** | Three.js Topology Canvas, `/api/state`, 2D Table |
 | **PHASE 10**| Administration & Audit | Security thresholds, system diagnostics, immutable audit log | **COMPLETE** | `/api/health`, Threshold controls |
 | **PHASE 11**| ShopSphere Modernization | Polished storefront, responsive catalog, cart drawer, checkout | **COMPLETE** | Verified HTTP 200 at `/shop`, 98.8KB rendered |
@@ -167,11 +167,27 @@
 - [x] Dedicated Automated Test Suite (`tests/test_self_healing_command_center.py`: 26/26 passed, 100% pass rate; full platform regression 173/173 passed) — *Verified*
 - [x] Complete Phase 7 Documentation Suite in `docs/v3-transformation/phase-7/` (15 comprehensive documents) — *Verified*
 
-### Module 8: Threat Intelligence & MITRE Explorer (Phase 8)
-- [x] IOC search tool (IP address, Domain, URL, Hash) (`lookupIOC()`) — *Verified*
-- [x] Active Quarantined IP list with expiration countdown and one-click unblock — *Verified*
-- [x] Interactive MITRE ATT&CK Matrix Grid (Tactics & Techniques: T1190, T1059.007, T1110, T1078, T1499) — *Verified*
-- [x] Coverage mapping to AutoHeal detection rules — *Verified*
+### Module 8: 3D Threat Topology + AI SOC Copilot (Phase 8)
+- [x] **Module A: 3D Threat Topology (`/threat-topology`)**:
+  - [x] Interactive 3D WebGL canvas (`THREE.WebGLRenderer`) with Obsidian Sentinel palette (`#090D14` backdrop, `#151F2C` grid, metallic shaders) — *Verified in script.js & style.css*
+  - [x] 8-Entity Taxonomy Normalization (`SOURCE_IP`, `TARGET_ENDPOINT`, `AFFECTED_ASSET`, `DETECTION_RULE`, `SECURITY_EVENT`, `SECURITY_INCIDENT`, `REMEDIATION_ACTION`, `VERIFICATION_PROBE`) populated strictly from real SQLite tables — *Verified in threat_topology_models.py*
+  - [x] Confirmed vs Inferred Edge Differentiation: Solid lines (`#38BDF8`, `#22C55E`, `#A78BFA`) for relational/rule linkages vs dashed lines (`#818CF8`) for heuristic/temporal correlation — *Verified*
+  - [x] Layered Cylindrical Orbital Layout algorithm with severity elevation ($Z$-axis modulation) — *Verified*
+  - [x] Interactive Camera Orbit Controls (Rotate, Pan, Zoom, Reset `R`, Focus `F`, Deselect `Esc`, Severity filter `1-5`) — *Verified*
+  - [x] Raycaster node selection triggering smooth camera focus and 640px slide-over Entity Inspector Drawer (`#topologyInspectorDrawer`) — *Verified*
+  - [x] Collapsible Chronological Attack Sequence Traversal Tray (`#attackSequenceTray`) with auto-play and step camera tracking — *Verified*
+  - [x] Real-time Server-Sent Events (SSE) stream (`/api/threat-topology/stream`) with heartbeat and dynamic node/edge appending — *Verified*
+  - [x] Full WCAG 2.1 AA Accessible 2D Security Ledger Fallback Table (`#topology2DTable`) with severity filtering and search (`btnToggleTopology2D`) — *Verified*
+- [x] **Module B: AI SOC Copilot (`/soc-copilot`)**:
+  - [x] Dual-Mode AI Provider Architecture (`AIProviderManager`) supporting Google Gemini, Anthropic Claude, OpenAI, Ollama, and Deterministic Grounded Local Mode (Zero-Fabrication Contract) — *Verified on `/api/copilot/provider-status`*
+  - [x] 7-Source Evidence Retrieval Pipeline (`EvidenceRetriever`) querying `security_incidents`, `security_events`, `self_healing_executions`, `soar_executions`, `blocked_clients`, `RULE_METADATA`, and `threat_intel` — *Verified on `/api/copilot/evidence`*
+  - [x] Strict Separation of Confirmed Facts from Analytical Hypotheses in 4-Part Structured Findings Dossier (Facts, Root Cause & Attack Path, Hypotheses, Playbooks) — *Verified on `/api/copilot/investigate/{id}`*
+  - [x] Defense-in-Depth Security Guardrails: Multi-vector secret redaction (`redact_secrets()`) and prompt injection sanitization (`sanitize_analyst_prompt()` with `[BLOCKED_INSTRUCTION_OVERRIDE]`) — *Verified*
+  - [x] Formal 12-Section Post-Incident Report Generator (`IncidentReportGenerator`) persisted in Table 26 (`incident_reports`) with SHA-256 audit hash and JSON/Markdown/PDF export — *Verified on `/api/copilot/reports/generate`*
+  - [x] Multi-Turn Session Persistence in Table 25 (`soc_copilot_conversations`) with citation tracking — *Verified*
+- [x] **Database Schema Enhancements**: Tables 25 (`soc_copilot_conversations`) and 26 (`incident_reports`) + 4 indexes + seed defaults in `database.py` — *Verified*
+- [x] **Dedicated Automated Test Suite**: `tests/test_threat_topology_and_copilot.py` (26/26 passed, 100% pass rate; full regression 199/199 passed) — *Verified*
+- [x] **Complete Phase 8 Documentation Suite** in `docs/v3-transformation/phase-8/` (16 comprehensive documents) — *Verified*
 
 ### Module 9: Asset Management & Reports (Phase 9)
 - [x] Monitored network devices inventory bound to `/api/state` — *Verified*

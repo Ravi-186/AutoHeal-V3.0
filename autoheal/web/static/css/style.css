@@ -5060,3 +5060,506 @@ code, pre, .terminal-text {
     gap: 8px;
     background: #151F2C;
 }
+
+/* ==========================================================================
+   PHASE 8: 3D THREAT TOPOLOGY & AI SOC COPILOT (OBSIDIAN SENTINEL)
+   ========================================================================== */
+
+/* 1. Threat Topology Container & Toolbar */
+.topology-workspace {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    position: relative;
+    min-height: calc(100vh - 120px);
+}
+
+.topology-toolbar {
+    background: #101722;
+    border: 1px solid #253344;
+    border-radius: 8px;
+    padding: 12px 16px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.topology-filter-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.topology-filter-pill {
+    background: #151F2C;
+    border: 1px solid #253344;
+    color: #94A3B8;
+    padding: 5px 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    user-select: none;
+}
+
+.topology-filter-pill:hover,
+.topology-filter-pill.active {
+    background: rgba(56, 189, 248, 0.15);
+    border-color: #38BDF8;
+    color: #F1F5F9;
+}
+
+.topology-filter-pill.severity-crit.active {
+    background: rgba(239, 68, 68, 0.18);
+    border-color: #EF4444;
+    color: #EF4444;
+}
+
+.topology-search-input {
+    background: #151F2C;
+    border: 1px solid #253344;
+    color: #F1F5F9;
+    padding: 6px 12px;
+    font-size: 0.8rem;
+    border-radius: 4px;
+    outline: none;
+    min-width: 220px;
+}
+
+.topology-search-input:focus {
+    border-color: #38BDF8;
+    box-shadow: 0 0 0 1px #38BDF8;
+}
+
+/* 2. 3D WebGL Viewport & HUD Overlay */
+.topology-viewport-card {
+    position: relative;
+    background: #090D14;
+    border: 1px solid #253344;
+    border-radius: 8px;
+    overflow: hidden;
+    height: 640px;
+    display: flex;
+    box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.8);
+}
+
+.threat-topology-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    cursor: grab;
+}
+
+.threat-topology-canvas:active {
+    cursor: grabbing;
+}
+
+.topology-hud-overlay {
+    position: absolute;
+    top: 14px;
+    left: 14px;
+    background: rgba(16, 23, 34, 0.85);
+    backdrop-filter: blur(8px);
+    border: 1px solid #253344;
+    border-radius: 6px;
+    padding: 10px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    pointer-events: none;
+    z-index: 5;
+}
+
+.topology-hud-metric {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.75rem;
+    color: #94A3B8;
+}
+
+.topology-hud-metric strong {
+    color: #F1F5F9;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.topology-legend-box {
+    position: absolute;
+    bottom: 14px;
+    right: 14px;
+    background: rgba(16, 23, 34, 0.88);
+    backdrop-filter: blur(8px);
+    border: 1px solid #253344;
+    border-radius: 6px;
+    padding: 10px 14px;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px 14px;
+    z-index: 5;
+    font-size: 0.72rem;
+    color: #94A3B8;
+}
+
+.topology-legend-swatch {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.legend-dot-chip {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+/* 3. Attack Sequence Timeline Tray */
+.topology-timeline-tray {
+    background: #101722;
+    border: 1px solid #253344;
+    border-radius: 8px;
+    padding: 14px 16px;
+}
+
+.topology-timeline-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.topology-timeline-steps {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    padding-bottom: 8px;
+}
+
+.timeline-step-card {
+    flex: 0 0 240px;
+    background: #151F2C;
+    border: 1px solid #253344;
+    border-left: 3px solid #38BDF8;
+    border-radius: 6px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.75rem;
+}
+
+.timeline-step-card.confirmed {
+    border-left-color: #22C55E;
+}
+
+.timeline-step-card.inferred {
+    border-left-color: #A78BFA;
+    border-left-style: dashed;
+}
+
+.timeline-step-time {
+    font-size: 0.68rem;
+    color: #64748B;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.timeline-step-title {
+    font-weight: 700;
+    color: #F1F5F9;
+}
+
+.timeline-step-desc {
+    color: #94A3B8;
+    font-size: 0.72rem;
+    line-height: 1.35;
+}
+
+/* 4. AI SOC Copilot Workspace */
+.copilot-workspace {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-height: calc(100vh - 120px);
+}
+
+.copilot-provider-banner {
+    background: #101722;
+    border: 1px solid #253344;
+    border-radius: 8px;
+    padding: 10px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.copilot-provider-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(56, 189, 248, 0.12);
+    border: 1px solid #38BDF8;
+    color: #38BDF8;
+    padding: 4px 10px;
+    border-radius: 14px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.copilot-provider-badge.deterministic {
+    background: rgba(167, 139, 250, 0.12);
+    border-color: #A78BFA;
+    color: #A78BFA;
+}
+
+.copilot-split-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    height: 720px;
+}
+
+@media (max-width: 1024px) {
+    .copilot-split-grid {
+        grid-template-columns: 1fr;
+        height: auto;
+    }
+}
+
+/* Copilot Left Panel (Chat Interface) */
+.copilot-chat-card {
+    background: #101722;
+    border: 1px solid #253344;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    height: 100%;
+}
+
+.copilot-chat-feed {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.copilot-msg-row {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+}
+
+.copilot-msg-row.analyst {
+    flex-direction: row-reverse;
+}
+
+.copilot-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+}
+
+.copilot-avatar.copilot {
+    background: rgba(56, 189, 248, 0.18);
+    color: #38BDF8;
+    border: 1px solid #38BDF8;
+}
+
+.copilot-avatar.analyst {
+    background: rgba(167, 139, 250, 0.18);
+    color: #A78BFA;
+    border: 1px solid #A78BFA;
+}
+
+.copilot-bubble {
+    max-width: 82%;
+    padding: 12px 14px;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    background: #151F2C;
+    border: 1px solid #253344;
+    color: #F1F5F9;
+}
+
+.copilot-msg-row.analyst .copilot-bubble {
+    background: rgba(56, 189, 248, 0.1);
+    border-color: rgba(56, 189, 248, 0.35);
+}
+
+.copilot-suggested-prompts-bar {
+    padding: 8px 14px;
+    background: #0E1622;
+    border-top: 1px solid #253344;
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+}
+
+.copilot-prompt-chip {
+    background: #151F2C;
+    border: 1px solid #253344;
+    color: #38BDF8;
+    padding: 5px 10px;
+    font-size: 0.72rem;
+    border-radius: 12px;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.copilot-prompt-chip:hover {
+    background: rgba(56, 189, 248, 0.15);
+    border-color: #38BDF8;
+    color: #F1F5F9;
+}
+
+.copilot-input-bar {
+    padding: 12px 14px;
+    background: #151F2C;
+    border-top: 1px solid #253344;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.copilot-input-area {
+    flex: 1;
+    background: #101722;
+    border: 1px solid #253344;
+    color: #F1F5F9;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 0.82rem;
+    resize: none;
+    height: 42px;
+    outline: none;
+}
+
+.copilot-input-area:focus {
+    border-color: #38BDF8;
+    box-shadow: 0 0 0 1px #38BDF8;
+}
+
+/* Copilot Right Panel (Structured Dossier & Report Hub) */
+.copilot-dossier-card {
+    background: #101722;
+    border: 1px solid #253344;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    height: 100%;
+}
+
+.copilot-dossier-tabs {
+    display: flex;
+    background: #0E1622;
+    border-bottom: 1px solid #253344;
+}
+
+.copilot-dossier-tab-btn {
+    flex: 1;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: #94A3B8;
+    padding: 12px 8px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s ease;
+}
+
+.copilot-dossier-tab-btn.active {
+    color: #38BDF8;
+    border-bottom-color: #38BDF8;
+    background: rgba(56, 189, 248, 0.05);
+}
+
+.copilot-dossier-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.copilot-fact-card {
+    background: #151F2C;
+    border: 1px solid #253344;
+    border-left: 3px solid #22C55E;
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 0.78rem;
+    color: #F1F5F9;
+}
+
+.copilot-probable-card {
+    background: #151F2C;
+    border: 1px solid #253344;
+    border-left: 3px solid #F59E0B;
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 0.78rem;
+    color: #F1F5F9;
+}
+
+.copilot-hypo-card {
+    background: #151F2C;
+    border: 1px solid #253344;
+    border-left: 3px solid #A78BFA;
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 0.78rem;
+    color: #F1F5F9;
+}
+
+.copilot-citation-item {
+    background: #151F2C;
+    border: 1px solid #253344;
+    border-radius: 6px;
+    padding: 8px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.75rem;
+}
+
+.copilot-citation-badge {
+    background: rgba(56, 189, 248, 0.12);
+    color: #38BDF8;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+}
+
+.copilot-report-preview-box {
+    background: #090D14;
+    border: 1px solid #253344;
+    border-radius: 6px;
+    padding: 16px;
+    font-size: 0.78rem;
+    line-height: 1.6;
+    color: #F1F5F9;
+    max-height: 480px;
+    overflow-y: auto;
+    font-family: 'Inter', sans-serif;
+}
+

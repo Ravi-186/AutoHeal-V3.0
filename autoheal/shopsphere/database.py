@@ -543,6 +543,40 @@ def init_db():
         );
         """)
 
+        # 25. AI SOC Copilot Conversations Table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS soc_copilot_conversations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT UNIQUE NOT NULL,
+            analyst_id TEXT NOT NULL DEFAULT 'admin@sentinel.sec',
+            incident_id TEXT,
+            context_type TEXT NOT NULL DEFAULT 'INCIDENT',
+            context_target TEXT,
+            messages_json TEXT NOT NULL DEFAULT '[]',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+
+        # 26. Formal Security Incident Reports Table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS incident_reports (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            report_id TEXT UNIQUE NOT NULL,
+            incident_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            executive_summary TEXT NOT NULL,
+            full_report_json TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'DRAFT',
+            author TEXT NOT NULL DEFAULT 'AutoHeal AI SOC Copilot',
+            reviewed_by TEXT,
+            reviewed_at TIMESTAMP,
+            version INTEGER NOT NULL DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+
         # Enterprise Database Performance Indexes
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_blocked_clients_ip_active ON blocked_clients (client_ip, is_active, expires_at);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_security_events_temporal ON security_events (client_ip, timestamp);")
@@ -580,11 +614,16 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_sh_exec_approval ON self_healing_executions (approval_state);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_sh_audit_action ON self_healing_audit_logs (action_type, created_at DESC);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_sh_audit_exec ON self_healing_audit_logs (execution_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_copilot_session ON soc_copilot_conversations (session_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_copilot_incident ON soc_copilot_conversations (incident_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_incident_reports_inc ON incident_reports (incident_id, created_at DESC);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_incident_reports_status ON incident_reports (status);")
 
         conn.commit()
 
         # Seed initial self-healing policy and baseline records if needed
         seed_self_healing_defaults(conn)
+        seed_copilot_and_reports_defaults(conn)
 
 
 def seed_data():
@@ -1232,4 +1271,136 @@ def seed_self_healing_defaults(conn=None):
     finally:
         if should_close:
             conn.close()
+
+
+def seed_copilot_and_reports_defaults(conn: Optional[sqlite3.Connection] = None):
+    """Seeds baseline incident report and copilot analyst conversation context."""
+    should_close = False
+    if conn is None:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        should_close = True
+
+    try:
+        cursor = conn.cursor()
+
+        # 1. Seed baseline incident report
+        cursor.execute("SELECT COUNT(*) FROM incident_reports")
+        report_count = cursor.fetchone()[0]
+        if report_count == 0:
+            sample_report_json = json.dumps({
+                "report_id": "REP-20261101-INJ1004",
+                "incident_id": "INC-INJ-1004",
+                "title": "Security Incident Final Report: SQL Injection Exploit Containment on Product Catalog API",
+                "executive_summary": "AutoHeal Sentinel intercepted and neutralized a critical SQL injection attempt targeting /api/shop/products. The attacker utilized tautological boolean payloads (' OR '1'='1) originating from client IP 198.51.100.99. Sentinel's autonomous protection short-circuited the request with HTTP 403 Forbidden, followed by WAF quarantine and automated AST parameterization patching. Independent verification confirmed 100% exploit neutralization with zero regression.",
+                "timeline": [
+                    {"time": "2026-11-01 10:04:12 UTC", "stage": "INITIAL_DETECTION", "detail": "Event EVT-INJ-904 intercepted with SQL syntax in search query parameter."},
+                    {"time": "2026-11-01 10:04:13 UTC", "stage": "PERIMETER_ENFORCEMENT", "detail": "WAF blocked incoming payload with HTTP 403 Forbidden."},
+                    {"time": "2026-11-01 10:04:15 UTC", "stage": "CORRELATION_INCIDENT", "detail": "Incident INC-INJ-1004 created and escalated to CRITICAL."},
+                    {"time": "2026-11-01 10:04:18 UTC", "stage": "IP_QUARANTINE", "detail": "Source IP 198.51.100.99 placed in active WAF blocklist (3600s TTL)."},
+                    {"time": "2026-11-01 10:04:22 UTC", "stage": "AST_PATCHING", "detail": "ProductService search parameter converted to parameterized binding."},
+                    {"time": "2026-11-01 10:04:25 UTC", "stage": "INDEPENDENT_VERIFICATION", "detail": "Dual-probe verification: Probe 1 (Functional 200) passed; Probe 2 (Exploit 403) passed."},
+                    {"time": "2026-11-01 10:04:30 UTC", "stage": "INCIDENT_RESOLVED", "detail": "Remediation verified and execution record marked VERIFIED."}
+                ],
+                "detection_info": {
+                    "rule_id": "INJ-001",
+                    "rule_name": "SQL Injection Attack",
+                    "mitre_tactic": "Initial Access (TA0001)",
+                    "mitre_technique": "Exploit Public-Facing Application (T1190)",
+                    "severity": "CRITICAL"
+                },
+                "evidence_ledger": [
+                    {"type": "TELEMETRY_EVENT", "id": "EVT-INJ-904", "evidence": "Payload query: ' OR '1'='1 in /api/shop/products?q=..."},
+                    {"type": "WAF_BLOCK", "id": "BLK-198-51-100", "evidence": "Client IP 198.51.100.99 quarantined with 3600s TTL."},
+                    {"type": "AST_PATCH", "id": "PATCH-AST-01", "evidence": "Query converted to parameterized statement."}
+                ],
+                "affected_assets": [
+                    {"asset": "ShopSphere:ProductCatalog", "endpoint": "/api/shop/products", "service": "ProductService", "impact": "CONTAINED"}
+                ],
+                "root_cause_analysis": {
+                    "confirmed_facts": [
+                        "Source IP 198.51.100.99 transmitted raw SQL injection tokens in query string.",
+                        "Endpoint /api/shop/products processed the search parameter via raw string formatting.",
+                        "Sentinel perimeter WAF intercepted the payload prior to database execution."
+                    ],
+                    "probable_causes": [
+                        "Automated web application security scanner or adversary probing for unescaped database inputs."
+                    ],
+                    "unverified_hypotheses": [
+                        "Potential reconnaissance phase preceding automated database table exfiltration attempts."
+                    ]
+                },
+                "remediation_summary": {
+                    "action_executed": "CODE_REPAIR_PATCH & BLOCK_IP",
+                    "execution_id": "EXEC-20261101-A1B2C3D4",
+                    "verification_outcome": "VERIFIED (Dual-probe confirmed)",
+                    "rollback_state": "NONE (Stable)",
+                    "duration_ms": 284.1
+                },
+                "remaining_risks": "Low. Source IP quarantined for 3600s; code parameterization permanently closes injection vulnerability.",
+                "recommendations": [
+                    "Maintain continuous dual-probe verification window across all catalog endpoints.",
+                    "Review all database query call sites in ShopSphere to ensure 100% parameterization.",
+                    "Keep Sentinel WAF rule INJ-001 active in blocking mode."
+                ]
+            })
+
+            cursor.execute("""
+            INSERT INTO incident_reports (
+                report_id, incident_id, title, executive_summary, full_report_json, status, author
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                "REP-20261101-INJ1004",
+                "INC-INJ-1004",
+                "Security Incident Final Report: SQL Injection Exploit Containment on Product Catalog API",
+                "AutoHeal Sentinel intercepted and neutralized a critical SQL injection attempt targeting /api/shop/products. The attacker utilized tautological boolean payloads (' OR '1'='1) originating from client IP 198.51.100.99. Sentinel's autonomous protection short-circuited the request with HTTP 403 Forbidden, followed by WAF quarantine and automated AST parameterization patching.",
+                sample_report_json,
+                "FINAL",
+                "AutoHeal AI SOC Copilot"
+            ))
+
+        # 2. Seed baseline Copilot conversation
+        cursor.execute("SELECT COUNT(*) FROM soc_copilot_conversations")
+        conv_count = cursor.fetchone()[0]
+        if conv_count == 0:
+            sample_messages = json.dumps([
+                {
+                    "sender": "analyst",
+                    "timestamp": "2026-11-01 10:10:00 UTC",
+                    "content": "What happened in incident INC-INJ-1004, and what evidence supports the classification?"
+                },
+                {
+                    "sender": "copilot",
+                    "timestamp": "2026-11-01 10:10:02 UTC",
+                    "content": "In incident INC-INJ-1004, client IP 198.51.100.99 executed a critical SQL injection attempt against the /api/shop/products endpoint using a boolean tautology payload (' OR '1'='1). Sentinel Rule INJ-001 (MITRE T1190) triggered at 10:04:12 UTC. The request was short-circuited with HTTP 403 Forbidden, preventing database execution. The client was subsequently quarantined and a parameterized AST code patch was verified.",
+                    "evidence_references": [
+                        {"type": "EVENT", "id": "EVT-INJ-904", "timestamp": "2026-11-01 10:04:12 UTC", "detail": "HTTP 403 on /api/shop/products"},
+                        {"type": "INCIDENT", "id": "INC-INJ-1004", "status": "RESOLVED", "detail": "Critical SQL Injection"},
+                        {"type": "VERIFICATION", "id": "VER-PROBE-01", "result": "PASSED", "detail": "Dual-probe confirmed"}
+                    ],
+                    "recommendations": [
+                        "Verify perimeter firewall quarantine status for 198.51.100.99.",
+                        "Inspect related telemetry for lateral movement from the same subnet."
+                    ]
+                }
+            ])
+
+            cursor.execute("""
+            INSERT INTO soc_copilot_conversations (
+                session_id, analyst_id, incident_id, context_type, context_target, messages_json
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                "SESS-COPILOT-BASELINE",
+                "admin@sentinel.sec",
+                "INC-INJ-1004",
+                "INCIDENT",
+                "INC-INJ-1004",
+                sample_messages
+            ))
+
+        conn.commit()
+    finally:
+        if should_close:
+            conn.close()
+
 

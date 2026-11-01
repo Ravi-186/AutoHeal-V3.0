@@ -60,7 +60,8 @@ class AppSecProtectionMiddleware(BaseHTTPMiddleware):
 
         # SOC Control Plane endpoints are administrative tools and should not be throttled or blocked by AppSec data-plane rules
         is_control_plane = any(path.startswith(prefix) for prefix in [
-            "/api/security", "/api/soar", "/api/self-healing", "/api/executive", "/api/simulator"
+            "/api/security", "/api/soar", "/api/self-healing", "/api/executive", "/api/simulator",
+            "/api/threat-topology", "/api/copilot"
         ])
 
         # 1. Check if Client IP is actively quarantined in blocklist

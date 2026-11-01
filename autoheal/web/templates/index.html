@@ -56,6 +56,10 @@
                     <i class="fas fa-th" aria-hidden="true"></i>
                     <span class="nav-label">MITRE ATT&CK</span>
                 </button>
+                <button class="nav-item-btn" data-page="pageThreatTopology" title="3D Threat Topology" aria-label="3D Threat Topology">
+                    <i class="fas fa-cubes" aria-hidden="true"></i>
+                    <span class="nav-label">3D Threat Topology</span>
+                </button>
 
                 <div class="sidebar-section-label">Incident Response</div>
                 <button class="nav-item-btn" data-page="pageIncidents" title="Incident Center" aria-label="Incident Center">
@@ -74,6 +78,10 @@
                 <button class="nav-item-btn" data-page="pageHealing" title="Self-Healing" aria-label="Self-Healing">
                     <i class="fas fa-hand-holding-medical" aria-hidden="true"></i>
                     <span class="nav-label">Self-Healing</span>
+                </button>
+                <button class="nav-item-btn" data-page="pageSocCopilot" title="AI SOC Copilot" aria-label="AI SOC Copilot">
+                    <i class="fas fa-brain-circuit" aria-hidden="true"></i>
+                    <span class="nav-label">AI SOC Copilot</span>
                 </button>
 
                 <div class="sidebar-section-label">Asset Management</div>
@@ -2785,6 +2793,192 @@
                 </section>
 
                 <!-- ===================================================================
+                     MODULE 6B: AI SOC COPILOT (Phase 8)
+                     =================================================================== -->
+                <section id="pageSocCopilot" class="workspace-page">
+                    <div class="page-header-ribbon">
+                        <div>
+                            <h2><i class="fas fa-brain-circuit" style="color: var(--accent-purple);"></i> AI SOC Copilot</h2>
+                            <p>Grounded Security Intelligence • Attack Sequence Forensics • Evidence Citations • Automated Incident Reports</p>
+                        </div>
+                        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                            <div class="copilot-provider-badge" id="copilotProviderBadge" title="AI Provider Status">
+                                <span class="pulse-indicator"></span>
+                                <span id="copilotProviderName">Initializing Engine...</span>
+                            </div>
+                            <button class="btn btn-secondary" onclick="resetCopilotSession()" title="Start New Investigation Session">
+                                <i class="fas fa-rotate-left"></i> New Session
+                            </button>
+                            <button class="btn btn-primary" onclick="generateIncidentReport()" title="Generate Formal Incident Report">
+                                <i class="fas fa-file-contract"></i> Generate Report
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Context Selector Bar -->
+                    <div class="soc-card" style="margin-bottom: 16px; padding: 12px 18px;">
+                        <div style="display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap;">
+                            <div style="display: flex; gap: 12px; align-items: center; flex: 1; min-width: 280px;">
+                                <label style="font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; white-space: nowrap;">
+                                    <i class="fas fa-crosshairs" style="color: var(--accent-cyan); margin-right: 6px;"></i> Active Incident Target:
+                                </label>
+                                <select id="copilotIncidentSelector" class="soc-select" style="min-width: 220px; flex: 1;" onchange="onCopilotIncidentChange()">
+                                    <option value="">-- Global SOC Context (All Telemetry) --</option>
+                                    <!-- Populated dynamically -->
+                                </select>
+                            </div>
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <span id="copilotEvidenceBadge" class="badge badge-info" style="font-size: 11px;">
+                                    <i class="fas fa-database"></i> 0 Grounded Records
+                                </span>
+                                <button class="btn btn-outline btn-sm" onclick="triggerIncidentInvestigationFromCopilot()" id="btnCopilotDeepScan">
+                                    <i class="fas fa-microscope" style="color: var(--accent-cyan);"></i> Deep Correlation Scan
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Main Split Interface -->
+                    <div class="copilot-split-grid">
+                        <!-- Left Panel: Chat Stream -->
+                        <div class="soc-card copilot-chat-card">
+                            <div class="soc-card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <i class="fas fa-comments" style="color: var(--primary);"></i>
+                                    <h3>Analyst Investigation Dialogue</h3>
+                                </div>
+                                <span style="font-size: 11px; color: var(--text-muted);" id="copilotSessionIndicator">Session: SESS-ACTIVE</span>
+                            </div>
+                            
+                            <!-- Messages Feed -->
+                            <div class="copilot-messages-container" id="copilotChatMessages">
+                                <!-- Populated dynamically -->
+                            </div>
+
+                            <!-- Suggested Prompts Ribbon -->
+                            <div class="copilot-suggested-tray" id="copilotSuggestedPrompts">
+                                <!-- Quick Prompts inserted by JS -->
+                            </div>
+
+                            <!-- Input Form -->
+                            <form id="copilotInputForm" onsubmit="event.preventDefault(); submitCopilotChat();" class="copilot-input-bar">
+                                <textarea id="copilotInputText" rows="1" placeholder="Ask AI Copilot to investigate an incident, explain detection rules, correlate events, or recommend playbooks..." onkeydown="handleCopilotKeyDown(event)"></textarea>
+                                <button type="submit" class="btn btn-primary" id="btnCopilotSend" title="Send Question (Enter)">
+                                    <i class="fas fa-paper-plane"></i>
+                                </button>
+                            </form>
+                        </div>
+
+                        <!-- Right Panel: Findings Dossier & Report -->
+                        <div class="soc-card copilot-dossier-card">
+                            <div class="soc-card-header" style="padding-bottom: 0;">
+                                <div class="copilot-dossier-tabs">
+                                    <button class="dossier-tab-btn active" data-tab="findings" onclick="switchCopilotTab('findings')">
+                                        <i class="fas fa-clipboard-check"></i> Structured Findings
+                                    </button>
+                                    <button class="dossier-tab-btn" data-tab="evidence" onclick="switchCopilotTab('evidence')">
+                                        <i class="fas fa-layer-group"></i> Evidence (<span id="dossierEvidenceCount">0</span>)
+                                    </button>
+                                    <button class="dossier-tab-btn" data-tab="recommendations" onclick="switchCopilotTab('recommendations')">
+                                        <i class="fas fa-bolt"></i> Playbooks (<span id="dossierPlaybookCount">0</span>)
+                                    </button>
+                                    <button class="dossier-tab-btn" data-tab="report" onclick="switchCopilotTab('report')">
+                                        <i class="fas fa-file-invoice"></i> Incident Report
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="soc-card-body" style="padding: 18px; overflow-y: auto; max-height: calc(100vh - 300px);">
+                                <!-- Tab 1: Structured Findings -->
+                                <div id="copilotTabFindings" class="copilot-tab-pane active">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+                                        <h4 style="margin: 0; font-size: 13px; font-weight: 800; color: var(--text-primary);">
+                                            <i class="fas fa-shield-virus" style="color: var(--accent-cyan); margin-right: 6px;"></i> Incident Synthesis
+                                        </h4>
+                                        <div id="copilotConfidenceBadge" class="badge badge-info" style="font-family: var(--font-mono);">
+                                            Confidence: --
+                                        </div>
+                                    </div>
+                                    <div id="copilotIncidentSummaryBox" style="font-size: 13px; line-height: 1.6; color: var(--text-secondary); margin-bottom: 18px; background: rgba(0,0,0,0.25); border: 1px solid var(--border-panel); padding: 12px; border-radius: 6px;">
+                                        Select an incident or ask a question to generate a comprehensive investigation synthesis grounded in ShopSphere telemetry.
+                                    </div>
+
+                                    <h5 style="font-size: 12px; font-weight: 800; color: var(--status-success); text-transform: uppercase; margin: 16px 0 8px 0;">
+                                        <i class="fas fa-check-circle"></i> Confirmed Factual Findings
+                                    </h5>
+                                    <div id="copilotConfirmedFactsList" style="display: flex; flex-direction: column; gap: 8px;">
+                                        <div style="font-size: 12px; color: var(--text-muted); font-style: italic;">No confirmed findings loaded yet.</div>
+                                    </div>
+
+                                    <h5 style="font-size: 12px; font-weight: 800; color: var(--status-warning); text-transform: uppercase; margin: 18px 0 8px 0;">
+                                        <i class="fas fa-search"></i> Probable Root Causes
+                                    </h5>
+                                    <div id="copilotProbableCausesList" style="display: flex; flex-direction: column; gap: 8px;">
+                                        <div style="font-size: 12px; color: var(--text-muted); font-style: italic;">Awaiting correlation telemetry...</div>
+                                    </div>
+
+                                    <h5 style="font-size: 12px; font-weight: 800; color: var(--accent-purple); text-transform: uppercase; margin: 18px 0 8px 0;">
+                                        <i class="fas fa-lightbulb"></i> Hypotheses &amp; Inferences
+                                    </h5>
+                                    <div id="copilotHypothesesList" style="display: flex; flex-direction: column; gap: 8px;">
+                                        <div style="font-size: 12px; color: var(--text-muted); font-style: italic;">No unverified hypotheses.</div>
+                                    </div>
+                                </div>
+
+                                <!-- Tab 2: Evidence Citations -->
+                                <div id="copilotTabEvidence" class="copilot-tab-pane">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                                        <h4 style="margin: 0; font-size: 13px; font-weight: 800; color: var(--text-primary);">
+                                            <i class="fas fa-fingerprint" style="color: var(--accent-cyan); margin-right: 6px;"></i> Grounded Evidence Trail
+                                        </h4>
+                                        <span style="font-size: 11px; color: var(--text-muted);">Cryptographically Redacted Logs</span>
+                                    </div>
+                                    <div id="copilotEvidenceContainer" style="display: flex; flex-direction: column; gap: 10px;">
+                                        <div style="font-size: 12px; color: var(--text-muted); font-style: italic;">No telemetry records queried yet.</div>
+                                    </div>
+                                </div>
+
+                                <!-- Tab 3: Recommended Playbooks -->
+                                <div id="copilotTabRecommendations" class="copilot-tab-pane">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                                        <h4 style="margin: 0; font-size: 13px; font-weight: 800; color: var(--text-primary);">
+                                            <i class="fas fa-shield-alt" style="color: var(--accent-emerald); margin-right: 6px;"></i> Recommended SOAR &amp; Self-Healing Playbooks
+                                        </h4>
+                                        <span class="badge badge-success" style="font-size: 10px;">HUMAN APPROVAL REQUIRED</span>
+                                    </div>
+                                    <div id="copilotPlaybooksContainer" style="display: flex; flex-direction: column; gap: 10px;">
+                                        <div style="font-size: 12px; color: var(--text-muted); font-style: italic;">No playbooks evaluated for this scope.</div>
+                                    </div>
+                                </div>
+
+                                <!-- Tab 4: Formal Incident Report -->
+                                <div id="copilotTabReport" class="copilot-tab-pane">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                                        <h4 style="margin: 0; font-size: 13px; font-weight: 800; color: var(--text-primary);" id="copilotReportTitle">
+                                            Formal Incident Dossier
+                                        </h4>
+                                        <div style="display: flex; gap: 8px;">
+                                            <button class="btn btn-outline btn-sm" onclick="printIncidentReport()" title="Print / Save to PDF">
+                                                <i class="fas fa-print"></i> Print PDF
+                                            </button>
+                                            <button class="btn btn-primary btn-sm" onclick="exportIncidentReportJSON()" title="Export JSON Dossier">
+                                                <i class="fas fa-download"></i> Export JSON
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div id="copilotReportPreview" class="incident-report-preview-box">
+                                        <div style="text-align: center; color: var(--text-muted); padding: 30px;">
+                                            <i class="fas fa-file-signature" style="font-size: 32px; color: var(--accent-purple); margin-bottom: 12px; display: block;"></i>
+                                            Click <strong>Generate Report</strong> above or select an incident to compile an audit-ready executive dossier.
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ===================================================================
                      MODULE 7: THREAT INTELLIGENCE & IOCS
                      =================================================================== -->
                 <section id="pageThreatIntel" class="workspace-page">
@@ -2948,6 +3142,192 @@
                                     </div>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ===================================================================
+                     MODULE 8B: 3D THREAT TOPOLOGY (Phase 8)
+                     =================================================================== -->
+                <section id="pageThreatTopology" class="workspace-page">
+                    <div class="page-header-ribbon">
+                        <div>
+                            <h2><i class="fas fa-cubes" style="color: var(--accent-cyan);"></i> 3D Threat Topology</h2>
+                            <p>Spatial Security Graph • Correlated Entity Infrastructure • Confirmed vs Inferred Threat Vectors • Real-time SSE Sync</p>
+                        </div>
+                        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                            <button class="btn btn-secondary" onclick="toggleThreatTopologyViewMode()" id="btnThreatTopologyToggleView">
+                                <i class="fas fa-table"></i> 2D Ledger
+                            </button>
+                            <button class="btn btn-secondary" onclick="toggleAttackSequenceTray()" id="btnToggleAttackSequence">
+                                <i class="fas fa-history" style="color: var(--accent-purple);"></i> Attack Sequence
+                            </button>
+                            <button class="btn btn-primary" onclick="resetThreatTopologyCamera()">
+                                <i class="fas fa-compass"></i> Reset Camera
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Filter & Control Toolbar -->
+                    <div class="soc-card topology-toolbar" style="margin-bottom: 16px;">
+                        <div class="topology-toolbar-left">
+                            <div style="display: flex; align-items: center; gap: 4px;">
+                                <span style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-right: 6px;">Window:</span>
+                                <button class="filter-pill" data-time="1h" onclick="setTopologyTimeRange('1h')">1h</button>
+                                <button class="filter-pill" data-time="6h" onclick="setTopologyTimeRange('6h')">6h</button>
+                                <button class="filter-pill active" data-time="24h" onclick="setTopologyTimeRange('24h')">24h</button>
+                                <button class="filter-pill" data-time="7d" onclick="setTopologyTimeRange('7d')">7d</button>
+                                <button class="filter-pill" data-time="all" onclick="setTopologyTimeRange('all')">All</button>
+                            </div>
+
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Severity:</label>
+                                <select id="threatTopologySeverityFilter" class="soc-select" style="min-width: 110px;" onchange="applyThreatTopologyFilters()">
+                                    <option value="ALL">All Severities</option>
+                                    <option value="CRITICAL">Critical</option>
+                                    <option value="HIGH">High</option>
+                                    <option value="MEDIUM">Medium</option>
+                                    <option value="LOW">Low</option>
+                                </select>
+                            </div>
+
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Incident Focus:</label>
+                                <select id="threatTopologyIncidentFilter" class="soc-select" style="min-width: 170px;" onchange="applyThreatTopologyFilters()">
+                                    <option value="">All Incidents</option>
+                                    <!-- Populated dynamically -->
+                                </select>
+                            </div>
+
+                            <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); cursor: pointer; user-select: none;">
+                                <input type="checkbox" id="chkShowInferredEdges" checked onchange="toggleInferredEdgesVisibility()">
+                                Show Inferred Edges
+                            </label>
+                        </div>
+
+                        <div class="topology-toolbar-right">
+                            <div class="search-input-group" style="position: relative; width: 220px;">
+                                <i class="fas fa-search" style="position: absolute; left: 10px; top: 10px; color: var(--text-muted); font-size: 12px;"></i>
+                                <input type="text" id="threatTopologySearchInput" class="soc-input" style="padding-left: 30px; font-size: 12px;" placeholder="Search entity, IP, rule..." oninput="handleThreatTopologySearch(this.value)">
+                            </div>
+                            <button class="btn btn-outline btn-sm" onclick="refreshThreatTopologyGraph(true)" title="Force Refresh">
+                                <i class="fas fa-sync-alt"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 3D Spatial Canvas Viewport Card -->
+                    <div class="soc-card topology-viewport-card" id="threatTopology3DContainer">
+                        <div class="topology-canvas-container">
+                            <canvas id="threatTopologyCanvas"></canvas>
+
+                            <!-- HUD Overlay -->
+                            <div class="topology-hud-overlay">
+                                <div class="topology-hud-stat">
+                                    <div class="stat-val" id="topHudNodesCount">0</div>
+                                    <div class="stat-lbl">Graph Nodes</div>
+                                </div>
+                                <div class="topology-hud-stat">
+                                    <div class="stat-val" style="color: var(--status-info);" id="topHudConfirmedEdges">0</div>
+                                    <div class="stat-lbl">Confirmed Edges</div>
+                                </div>
+                                <div class="topology-hud-stat">
+                                    <div class="stat-val" style="color: var(--accent-purple);" id="topHudInferredEdges">0</div>
+                                    <div class="stat-lbl">Inferred Edges</div>
+                                </div>
+                                <div class="topology-hud-stat">
+                                    <div class="stat-val" style="color: var(--status-critical);" id="topHudQuarantined">0</div>
+                                    <div class="stat-lbl">Quarantined IPs</div>
+                                </div>
+                                <div class="topology-hud-stat">
+                                    <div class="stat-val" style="color: var(--status-warning);" id="topHudActiveIncidents">0</div>
+                                    <div class="stat-lbl">Active Incidents</div>
+                                </div>
+                            </div>
+
+                            <!-- Legend Box -->
+                            <div class="topology-legend-box">
+                                <div style="font-size: 10px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;">Node Taxonomy</div>
+                                <div class="topology-legend-chip"><span class="chip-dot" style="background: #F59E0B;"></span> Source IP</div>
+                                <div class="topology-legend-chip"><span class="chip-dot" style="background: #38BDF8;"></span> Endpoint / Route</div>
+                                <div class="topology-legend-chip"><span class="chip-dot" style="background: #22C55E;"></span> Target Asset</div>
+                                <div class="topology-legend-chip"><span class="chip-dot" style="background: #60A5FA;"></span> Detection Rule</div>
+                                <div class="topology-legend-chip"><span class="chip-dot" style="background: #EF4444;"></span> Security Incident</div>
+                                <div class="topology-legend-chip"><span class="chip-dot" style="background: #A78BFA;"></span> Remediation Op</div>
+                                <div class="topology-legend-chip"><span class="chip-dot" style="background: #34D399;"></span> Verification Probe</div>
+                                <div style="margin-top: 6px; border-top: 1px solid var(--border-panel); padding-top: 6px; font-size: 10px;">
+                                    <div style="display: flex; align-items: center; gap: 6px; color: var(--text-secondary); margin-bottom: 2px;">
+                                        <span style="display: inline-block; width: 14px; height: 2px; background: #38BDF8;"></span> Solid: Confirmed
+                                    </div>
+                                    <div style="display: flex; align-items: center; gap: 6px; color: var(--text-secondary);">
+                                        <span style="display: inline-block; width: 14px; height: 2px; background: #A78BFA; border-bottom: 1px dashed #A78BFA;"></span> Dashed: Inferred
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Side Entity Inspector Drawer -->
+                            <div class="topology-drawer" id="drawerTopologyInspector">
+                                <div class="drawer-header">
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <span class="badge" id="inspectorEntityTypeBadge">ENTITY</span>
+                                        <h3 id="inspectorEntityTitle" style="margin: 0; font-size: 14px; color: var(--text-primary); font-family: var(--font-mono);">--</h3>
+                                    </div>
+                                    <button class="btn btn-outline btn-sm" onclick="closeTopologyInspector()" style="padding: 4px 8px;">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                                <div class="drawer-body" id="inspectorEntityContent">
+                                    <!-- Populated dynamically -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Chronological Attack Sequence Tray (Collapsible) -->
+                        <div class="topology-timeline-tray" id="drawerAttackSequence" style="display: none;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <i class="fas fa-stream" style="color: var(--accent-purple);"></i>
+                                    <h4 style="margin: 0; font-size: 12px; font-weight: 800; color: var(--text-primary); text-transform: uppercase;">
+                                        Chronological Attack Sequence Trajectory
+                                    </h4>
+                                </div>
+                                <button class="btn btn-outline btn-sm" onclick="toggleAttackSequenceTray(false)" style="padding: 2px 6px;">
+                                    <i class="fas fa-chevron-down"></i>
+                                </button>
+                            </div>
+                            <div id="attackSequenceList" class="attack-sequence-scroll" style="display: flex; gap: 12px; overflow-x: auto; padding-bottom: 6px;">
+                                <!-- Trajectory step cards populated dynamically -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Accessible 2D Ledger Fallback (Toggleable) -->
+                    <div class="soc-card" id="threatTopology2DContainer" style="display: none; margin-top: 16px;">
+                        <div class="soc-card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <i class="fas fa-table" style="color: var(--primary);"></i>
+                                <h3>Accessible Threat Topology Ledger</h3>
+                            </div>
+                            <span class="badge badge-info" id="ledgerCountBadge">0 Entities</span>
+                        </div>
+                        <div class="soc-table-wrapper">
+                            <table class="soc-table">
+                                <thead>
+                                    <tr>
+                                        <th>Entity ID / Value</th>
+                                        <th>Taxonomy Type</th>
+                                        <th>Label / Role</th>
+                                        <th>Zone / Service</th>
+                                        <th>Severity / State</th>
+                                        <th>Incident Links</th>
+                                        <th>Connected Degree</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="threatTopologyTableBody">
+                                    <!-- Populated dynamically -->
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </section>
