@@ -85,6 +85,7 @@ document.addEventListener('DOMContentLoaded', function () {
     loadIncidentsList();
     loadQuarantinedClients();
     loadVulnerabilitiesTable();
+    loadSelfHealingDashboard();
     loadIncidentReportsTable();
     pingAllServices();
 });
@@ -205,6 +206,7 @@ function switchToTab(pageId) {
     } else if (pageId === 'pageHealing') {
         loadQuarantinedClients();
         loadVulnerabilitiesTable();
+        loadSelfHealingDashboard();
     } else if (pageId === 'pageThreatIntel') {
         loadQuarantinedClients();
     } else if (pageId === 'pageTopology') {
@@ -7401,4 +7403,912 @@ function renderSoarAccessibleList() {
     }
 }
 
+// =========================================================================
+// SECTION 17: PHASE 7 ADVANCED SELF-HEALING COMMAND CENTER CONTROLLER
+// Continuous Remediation • Fact/Hypothesis RCA • Risk Scoring • Verification
+// =========================================================================
 
+let shActiveExecutionId = null;
+let shActiveIncidentId = null;
+let shActivePlans = [];
+let shCurrentExecutions = [];
+let shFilterTimer = null;
+
+async function loadSelfHealingDashboard() {
+    await Promise.allSettled([
+        loadSelfHealingOverview(),
+        loadSelfHealingProtectionStatus(),
+        loadSelfHealingExecutions(),
+        checkAutonomyPolicyStatus()
+    ]);
+}
+
+async function loadSelfHealingOverview() {
+    try {
+        const res = await fetch('/api/self-healing/overview');
+        if (!res.ok) return;
+        const data = await res.json();
+
+        const updateEl = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = val;
+        };
+
+        updateEl('shKpiTotal', data.total_attempts ?? 0);
+        updateEl('shKpiSuccessful', data.successful_remediations ?? 0);
+        updateEl('shKpiFailed', data.failed_remediations ?? 0);
+        updateEl('shKpiPendingApprovals', data.pending_approvals ?? 0);
+        updateEl('shKpiAwaitingVerification', data.awaiting_verification ?? 0);
+        updateEl('shKpiVerifiedContainment', data.verified_containment ?? 0);
+        updateEl('shKpiRollbacks', data.rollback_count ?? 0);
+        updateEl('shKpiAvgDuration', `${data.avg_remediation_duration_ms ?? 0}ms`);
+        updateEl('shKpiVerifFailures', data.verification_failure_count ?? 0);
+        updateEl('shKpiSuccessRate', `${data.success_rate_percent ?? 0}% Verified Success`);
+    } catch (e) {
+        console.error('Error loading self-healing overview:', e);
+    }
+}
+
+async function loadSelfHealingProtectionStatus() {
+    const grid = document.getElementById('shProtectionGrid');
+    const badge = document.getElementById('shOverallStatusBadge');
+    const lastChecked = document.getElementById('shProtectionLastChecked');
+    if (!grid) return;
+
+    try {
+        const res = await fetch('/api/self-healing/protection-status');
+        if (!res.ok) return;
+        const data = await res.json();
+
+        if (badge) {
+            badge.textContent = data.overall_status;
+            badge.className = `badge badge-${data.overall_status === 'HEALTHY' ? 'success' : (data.overall_status === 'DEGRADED' ? 'warning' : 'danger')}`;
+        }
+        if (lastChecked) {
+            lastChecked.textContent = `Live Check: ${new Date().toLocaleTimeString()} UTC`;
+        }
+
+        const components = data.components || {};
+        const compKeys = [
+            { key: 'detection_engine', name: 'Detection Engine', icon: 'fa-eye' },
+            { key: 'event_ingestion', name: 'Event Ingestion', icon: 'fa-stream' },
+            { key: 'remediation_engine', name: 'Remediation Engine', icon: 'fa-screwdriver-wrench' },
+            { key: 'verification_engine', name: 'Verification Engine', icon: 'fa-vial-circle-check' },
+            { key: 'soar_engine', name: 'SOAR Engine', icon: 'fa-diagram-project' },
+            { key: 'database', name: 'SQLite DB', icon: 'fa-database' },
+            { key: 'background_workers', name: 'Background Workers', icon: 'fa-cogs' },
+            { key: 'shopsphere_target', name: 'ShopSphere Target', icon: 'fa-store' }
+        ];
+
+        grid.innerHTML = compKeys.map(c => {
+            const comp = components[c.key] || { status: 'UNKNOWN', details: 'No response' };
+            const statusClass = comp.status ? comp.status.toLowerCase() : 'unknown';
+            const statusColor = statusClass === 'healthy' ? 'var(--status-success)' : (statusClass === 'degraded' ? 'var(--status-warning)' : 'var(--status-danger)');
+
+            return `
+                <div class="sh-subsystem-box ${statusClass}">
+                    <div class="sh-subsystem-name">
+                        <span><i class="fa-solid ${c.icon}" style="color:${statusColor}; margin-right:6px;"></i> ${c.name}</span>
+                        <span class="badge badge-${statusClass === 'healthy' ? 'success' : (statusClass === 'degraded' ? 'warning' : 'danger')}" style="font-size:0.65rem;">${comp.status}</span>
+                    </div>
+                    <div class="sh-subsystem-desc">${escapeHtml(comp.details || '')}</div>
+                </div>
+            `;
+        }).join('');
+    } catch (e) {
+        console.error('Error loading protection status:', e);
+    }
+}
+
+async function checkAutonomyPolicyStatus() {
+    try {
+        const res = await fetch('/api/self-healing/policies');
+        if (!res.ok) return;
+        const policy = await res.json();
+
+        const lvlEl = document.getElementById('shHeaderPolicyLevel');
+        if (lvlEl) lvlEl.textContent = `L${policy.autonomy_level}`;
+
+        const banner = document.getElementById('shEmergencyStopBanner');
+        const triggerByEl = document.getElementById('shStopTriggerBy');
+        const reasonEl = document.getElementById('shStopReason');
+
+        if (policy.emergency_stop) {
+            if (banner) banner.style.display = 'flex';
+            if (triggerByEl) triggerByEl.textContent = policy.emergency_stop_by || 'SOC Administrator';
+            if (reasonEl) reasonEl.textContent = policy.emergency_stop_reason || 'Safety emergency stop activated';
+        } else {
+            if (banner) banner.style.display = 'none';
+        }
+    } catch (e) {
+        console.error('Error checking autonomy policy:', e);
+    }
+}
+
+async function loadSelfHealingExecutions() {
+    const tbody = document.getElementById('shActivityTableBody');
+    if (!tbody) return;
+
+    const stage = document.getElementById('shFilterStage')?.value || 'ALL';
+    const search = document.getElementById('shSearchInput')?.value?.trim() || '';
+
+    const params = new URLSearchParams({ limit: 50, offset: 0 });
+    if (stage && stage !== 'ALL') params.set('stage', stage);
+    if (search) params.set('search', search);
+
+    try {
+        const res = await fetch(`/api/self-healing/activity?${params.toString()}`);
+        if (!res.ok) throw new Error('Failed to fetch activity');
+        const data = await res.json();
+        shCurrentExecutions = data.items || [];
+
+        if (shCurrentExecutions.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:24px; color:var(--text-muted);">No remediation executions matching current filters.</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = shCurrentExecutions.map(item => {
+            const stageClass = item.lifecycle_stage === 'VERIFIED' ? 'success' :
+                (item.lifecycle_stage === 'FAILED' ? 'danger' :
+                (item.lifecycle_stage.includes('ROLLBACK') ? 'warning' : 'purple'));
+
+            const sevClass = item.severity === 'CRITICAL' ? 'danger' : (item.severity === 'HIGH' ? 'warning' : 'info');
+            const riskClass = item.risk_level === 'CRITICAL' ? 'danger' : (item.risk_level === 'HIGH' ? 'warning' : 'success');
+            const planAction = item.selected_plan ? (item.selected_plan.action_type || item.selected_plan.action || 'REMEDIATE') : 'ASSESS';
+
+            return `
+                <tr style="cursor: pointer;" onclick="inspectExecutionRca('${escapeHtml(item.execution_id)}')">
+                    <td class="font-mono text-cyan" style="font-weight:700;">${escapeHtml(item.execution_id)}</td>
+                    <td class="font-mono">${escapeHtml(item.incident_id)}</td>
+                    <td>
+                        <span class="badge badge-${sevClass}" style="font-size:0.65rem; margin-right:4px;">${escapeHtml(item.severity)}</span>
+                        <strong>${escapeHtml(planAction)}</strong>
+                        <div style="font-size:0.7rem; color:var(--text-muted);">${escapeHtml(item.affected_asset)}</div>
+                    </td>
+                    <td><span class="badge badge-${stageClass}">${escapeHtml(item.lifecycle_stage)}</span></td>
+                    <td><span class="badge badge-${riskClass}" style="font-size:0.65rem;">${escapeHtml(item.risk_level)}</span></td>
+                    <td>
+                        <span class="badge badge-${item.approval_state === 'APPROVED' ? 'success' : (item.approval_state === 'PENDING' ? 'warning' : 'danger')}" style="font-size:0.65rem;">
+                            ${escapeHtml(item.approval_state)}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge badge-${item.verification_state === 'VERIFIED' ? 'success' : (item.verification_state === 'FAILED' ? 'danger' : 'info')}" style="font-size:0.65rem;">
+                            ${escapeHtml(item.verification_state)}
+                        </span>
+                    </td>
+                    <td onclick="event.stopPropagation();">
+                        <div style="display:flex; gap:4px;">
+                            <button type="button" class="btn btn-outline btn-sm" onclick="inspectExecutionRca('${escapeHtml(item.execution_id)}')" title="View Root Cause Analysis" style="padding:2px 6px; font-size:0.7rem;">
+                                <i class="fa-solid fa-microscope"></i>
+                            </button>
+                            <button type="button" class="btn btn-outline btn-sm" onclick="inspectExecutionPlans('${escapeHtml(item.execution_id)}')" title="Generate / View Remediation Plans" style="padding:2px 6px; font-size:0.7rem; color:var(--accent-cyan);">
+                                <i class="fa-solid fa-compass"></i>
+                            </button>
+                            ${item.lifecycle_stage === 'AWAITING_APPROVAL' ? `
+                                <button type="button" class="btn btn-success btn-sm" onclick="approveRemediationPlan('${escapeHtml(item.execution_id)}')" title="Approve Plan" style="padding:2px 6px; font-size:0.7rem;">
+                                    <i class="fa-solid fa-check"></i>
+                                </button>
+                            ` : ''}
+                            ${['APPROVED', 'FAILED'].includes(item.lifecycle_stage) && item.selected_plan ? `
+                                <button type="button" class="btn btn-primary btn-sm" onclick="executeRemediationPlan('${escapeHtml(item.execution_id)}', ${escapeHtml(JSON.stringify(item.selected_plan))}, false)" title="Execute Plan" style="padding:2px 6px; font-size:0.7rem;">
+                                    <i class="fa-solid fa-play"></i>
+                                </button>
+                            ` : ''}
+                            ${['EXECUTING', 'VERIFYING'].includes(item.lifecycle_stage) ? `
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="triggerManualVerification('${escapeHtml(item.execution_id)}')" title="Run Verification Probe" style="padding:2px 6px; font-size:0.7rem;">
+                                    <i class="fa-solid fa-vial"></i>
+                                </button>
+                            ` : ''}
+                            ${['VERIFIED', 'FAILED', 'ROLLBACK_PENDING'].includes(item.lifecycle_stage) ? `
+                                <button type="button" class="btn btn-danger btn-sm" onclick="triggerExecutionRollback('${escapeHtml(item.execution_id)}')" title="Rollback Remediation" style="padding:2px 6px; font-size:0.7rem;">
+                                    <i class="fa-solid fa-rotate-left"></i>
+                                </button>
+                            ` : ''}
+                            <button type="button" class="btn btn-ghost btn-sm" onclick="openExecutionAuditModal('${escapeHtml(item.execution_id)}')" title="Audit Trail" style="padding:2px 6px; font-size:0.7rem;">
+                                <i class="fa-solid fa-book"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:24px; color:var(--status-danger);">Error querying executions: ${escapeHtml(e.message)}</td></tr>`;
+    }
+}
+
+function debouncedFilterExecutions() {
+    clearTimeout(shFilterTimer);
+    shFilterTimer = setTimeout(() => {
+        loadSelfHealingExecutions();
+    }, 250);
+}
+
+async function inspectExecutionRca(executionId) {
+    shActiveExecutionId = executionId;
+    const body = document.getElementById('shRcaWorkspaceBody');
+    const badge = document.getElementById('shRcaIncidentBadge');
+    const titleEl = document.getElementById('shActiveExecutionTitle');
+    const activeBadge = document.getElementById('shActiveLifecycleBadge');
+
+    if (!body) return;
+
+    body.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Loading root cause analysis...</div>`;
+
+    try {
+        const execRes = await fetch(`/api/self-healing/executions/${executionId}`);
+        if (!execRes.ok) throw new Error('Execution not found');
+        const execData = await execRes.json();
+        shActiveIncidentId = execData.incident_id;
+
+        if (titleEl) titleEl.textContent = `${executionId} (${execData.incident_id})`;
+        if (activeBadge) {
+            activeBadge.textContent = execData.lifecycle_stage;
+            activeBadge.className = `badge badge-${execData.lifecycle_stage === 'VERIFIED' ? 'success' : (execData.lifecycle_stage === 'FAILED' ? 'danger' : 'purple')}`;
+        }
+        if (badge) badge.textContent = execData.incident_id;
+
+        // Update 14-step visualizer
+        updateLifecycleStepper(execData.lifecycle_stage);
+
+        // Fetch RCA
+        const rcaRes = await fetch(`/api/self-healing/diagnose/${execData.incident_id}`);
+        const rcaData = rcaRes.ok ? await rcaRes.json() : {};
+
+        const facts = rcaData.confirmed_facts || (execData.root_cause ? execData.root_cause.confirmed_facts : []) || [];
+        const causes = rcaData.probable_causes || (execData.root_cause ? execData.root_cause.probable_causes : []) || [];
+        const hypotheses = rcaData.ai_hypotheses || (execData.root_cause ? execData.root_cause.ai_hypotheses : []) || [];
+
+        body.innerHTML = `
+            <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px;">
+                <div>
+                    <span class="font-mono text-cyan" style="font-weight: 700;">${escapeHtml(execData.incident_id)}</span>
+                    <span style="font-size: 0.72rem; color: var(--text-muted); margin-left: 8px;">Rule: <code>${escapeHtml(rcaData.rule_id || 'UNKNOWN')}</code></span>
+                </div>
+                <button type="button" class="btn btn-outline btn-sm" onclick="inspectExecutionPlans('${escapeHtml(executionId)}')" style="font-size: 0.72rem;">
+                    <i class="fa-solid fa-compass"></i> View Remediation Plans
+                </button>
+            </div>
+
+            <!-- Confirmed Facts -->
+            <div class="sh-rca-box">
+                <div class="sh-rca-section-title" style="color: var(--status-success);">
+                    <i class="fa-solid fa-check-double"></i> Confirmed Facts (Evidence Proven)
+                </div>
+                ${facts.map(f => `<div class="sh-rca-item fact">${escapeHtml(f)}</div>`).join('') || '<div style="font-size:0.72rem; color:var(--text-muted);">No recorded facts.</div>'}
+            </div>
+
+            <!-- Probable Causes -->
+            <div class="sh-rca-box">
+                <div class="sh-rca-section-title" style="color: var(--status-warning);">
+                    <i class="fa-solid fa-triangle-exclamation"></i> Probable Causes (Rule & Heuristics)
+                </div>
+                ${causes.map(c => `<div class="sh-rca-item cause">${escapeHtml(c)}</div>`).join('') || '<div style="font-size:0.72rem; color:var(--text-muted);">No correlated causes.</div>'}
+            </div>
+
+            <!-- AI Hypotheses -->
+            <div class="sh-rca-box">
+                <div class="sh-rca-section-title" style="color: var(--accent-purple);">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> AI Hypotheses (Analyst Review Required)
+                </div>
+                ${hypotheses.map(h => `<div class="sh-rca-item hypothesis">${escapeHtml(h)}</div>`).join('') || '<div style="font-size:0.72rem; color:var(--text-muted);">No hypotheses.</div>'}
+            </div>
+
+            <div style="background: var(--bg-card-subtle); border: 1px solid var(--border-panel); border-radius: 6px; padding: 10px; font-size: 0.72rem; color: var(--text-muted); margin-top: 10px;">
+                <i class="fa-solid fa-info-circle" style="color: var(--accent-cyan); margin-right: 4px;"></i>
+                Evidence Source: <strong>${rcaData.telemetry_count ?? 0} events</strong> in sliding window • Target: <code>${escapeHtml(execData.affected_asset)}</code>
+            </div>
+        `;
+    } catch (e) {
+        body.innerHTML = `<div style="color:var(--status-danger); padding:20px; text-align:center;">Failed to load RCA: ${escapeHtml(e.message)}</div>`;
+    }
+}
+
+async function inspectExecutionPlans(executionId) {
+    shActiveExecutionId = executionId;
+    const card = document.getElementById('shPlannerCard');
+    const body = document.getElementById('shPlannerBody');
+    const incIdEl = document.getElementById('shPlannerIncidentId');
+    if (!card || !body) return;
+
+    card.style.display = 'block';
+    body.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Generating explainable remediation plans...</div>`;
+
+    try {
+        const execRes = await fetch(`/api/self-healing/executions/${executionId}`);
+        const execData = await execRes.json();
+        const incId = execData.incident_id;
+        if (incIdEl) incIdEl.textContent = `${executionId} (${incId})`;
+
+        const planRes = await fetch('/api/self-healing/plans/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ incident_id: incId })
+        });
+        const planData = await planRes.json();
+        shActivePlans = planData.plans || [];
+
+        if (shActivePlans.length === 0) {
+            body.innerHTML = `<div style="color:var(--text-muted); padding:20px; text-align:center;">No automated plans available for incident ${escapeHtml(incId)}.</div>`;
+            return;
+        }
+
+        body.innerHTML = `
+            <div style="font-size:0.75rem; color:var(--text-secondary); margin-bottom:14px;">
+                The Intelligent Planner evaluated detection category, asset scope, and reversibility to generate ${shActivePlans.length} actionable response option(s).
+            </div>
+            <div class="sh-plans-grid">
+                ${shActivePlans.map((plan, idx) => {
+                    const ra = plan.risk_assessment || {};
+                    const bd = ra.score_breakdown || {};
+                    const riskColor = plan.risk_level === 'CRITICAL' ? 'var(--status-danger)' :
+                        (plan.risk_level === 'HIGH' ? 'var(--status-warning)' : 'var(--status-success)');
+
+                    return `
+                        <div class="sh-plan-card ${plan.is_recommended ? 'recommended' : ''}">
+                            <div>
+                                <div class="sh-plan-title">
+                                    <span>${escapeHtml(plan.title)}</span>
+                                    ${plan.is_recommended ? '<span class="badge badge-cyan" style="font-size:0.65rem;">Recommended</span>' : ''}
+                                </div>
+                                <div class="sh-plan-desc">${escapeHtml(plan.description)}</div>
+
+                                <div class="sh-plan-vectors">
+                                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                                        <span>Risk Score: <strong style="color:${riskColor};">${ra.total_score || 0}/14 (${plan.risk_level})</strong></span>
+                                        <span>Reversibility: <strong>${escapeHtml(plan.reversibility || 'REVERSIBLE')}</strong></span>
+                                    </div>
+                                    <div style="font-size:0.68rem; color:var(--text-muted); margin-bottom:6px;">
+                                        Severity: ${bd.severity_score || 0} • Scope: ${bd.scope_score || 0} • Rev: ${bd.reversibility_score || 0} • User Impact: ${bd.user_impact_score || 0}
+                                    </div>
+                                    <div style="font-size:0.68rem; color:var(--accent-cyan);">
+                                        <i class="fa-solid fa-shield"></i> ${escapeHtml(ra.user_impact_summary || '')}
+                                    </div>
+                                </div>
+
+                                <div style="font-size:0.7rem; color:var(--text-muted); margin-bottom:12px;">
+                                    <strong>Verification Procedure:</strong> ${escapeHtml(plan.verification_procedure || '')}
+                                </div>
+                            </div>
+
+                            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+                                <button type="button" class="btn btn-outline btn-sm" onclick="executeRemediationPlan('${escapeHtml(executionId)}', ${escapeHtml(JSON.stringify(plan))}, true)">
+                                    <i class="fa-solid fa-flask"></i> Dry-Run
+                                </button>
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="approveRemediationPlan('${escapeHtml(executionId)}')">
+                                    <i class="fa-solid fa-check"></i> Approve
+                                </button>
+                                <button type="button" class="btn btn-primary btn-sm" onclick="executeRemediationPlan('${escapeHtml(executionId)}', ${escapeHtml(JSON.stringify(plan))}, false)">
+                                    <i class="fa-solid fa-bolt"></i> Execute Live
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        `;
+        card.scrollIntoView({ behavior: 'smooth' });
+    } catch (e) {
+        body.innerHTML = `<div style="color:var(--status-danger); padding:20px; text-align:center;">Failed to generate plans: ${escapeHtml(e.message)}</div>`;
+    }
+}
+
+function closePlannerPanel() {
+    const card = document.getElementById('shPlannerCard');
+    if (card) card.style.display = 'none';
+}
+
+async function executeRemediationPlan(executionId, plan, isDryRun = false) {
+    try {
+        const res = await fetch('/api/self-healing/execute', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                execution_id: executionId,
+                plan: plan,
+                actor: 'admin@sentinel.sec',
+                dry_run: isDryRun
+            })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+            toastr.error(data.detail || 'Execution failed', 'Remediation Error');
+            return;
+        }
+
+        if (isDryRun) {
+            toastr.info(data.simulated_outcome || 'Dry run simulation passed', 'Simulation Complete');
+        } else {
+            const verif = data.verification || {};
+            if (verif.verified) {
+                toastr.success(`Action ${data.action_type} executed and verified passing!`, 'Remediation Verified');
+            } else {
+                toastr.warning(`Action executed but verification failed. Rollback pending.`, 'Verification Alert');
+            }
+            loadSelfHealingDashboard();
+            inspectExecutionRca(executionId);
+        }
+    } catch (e) {
+        toastr.error(e.message, 'Execution Exception');
+    }
+}
+
+async function approveRemediationPlan(executionId) {
+    try {
+        const res = await fetch('/api/self-healing/approve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                execution_id: executionId,
+                actor: 'admin@sentinel.sec',
+                notes: 'Approved via Self-Healing Command Center'
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Approval failed');
+        toastr.success(`Plan for ${executionId} approved successfully.`, 'Gate Approved');
+        loadSelfHealingDashboard();
+        inspectExecutionRca(executionId);
+    } catch (e) {
+        toastr.error(e.message, 'Approval Error');
+    }
+}
+
+async function triggerManualVerification(executionId) {
+    try {
+        const exec = shCurrentExecutions.find(e => e.execution_id === executionId) || {};
+        const plan = exec.selected_plan || { action_type: 'BLOCK_IP', target: '127.0.0.1' };
+
+        const res = await fetch('/api/self-healing/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                execution_id: executionId,
+                plan: plan,
+                actor: 'admin@sentinel.sec'
+            })
+        });
+        const data = await res.json();
+        if (data.verified) {
+            toastr.success('Synthetic dual-probe verification confirmed threat containment.', 'Verification Passed');
+        } else {
+            toastr.error('Verification probe failed to confirm containment.', 'Verification Failed');
+        }
+        loadSelfHealingDashboard();
+        inspectExecutionRca(executionId);
+    } catch (e) {
+        toastr.error(e.message, 'Verification Probe Error');
+    }
+}
+
+async function triggerExecutionRollback(executionId) {
+    const reason = prompt('Confirm safe rollback of remediation. Provide reason:', 'Operator requested rollback to pre-change baseline.');
+    if (!reason) return;
+
+    try {
+        const res = await fetch('/api/self-healing/rollback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                execution_id: executionId,
+                actor: 'admin@sentinel.sec',
+                reason: reason
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Rollback failed');
+        toastr.success(`Pre-change state restored for ${executionId}.`, 'Rollback Complete');
+        loadSelfHealingDashboard();
+        inspectExecutionRca(executionId);
+    } catch (e) {
+        toastr.error(e.message, 'Rollback Error');
+    }
+}
+
+function updateLifecycleStepper(activeStage) {
+    const steps = document.querySelectorAll('.sh-step');
+    const stagesOrder = [
+        'DETECTED', 'INVESTIGATING', 'DIAGNOSING', 'PLAN_GENERATED',
+        'AWAITING_APPROVAL', 'APPROVED', 'EXECUTING', 'VERIFYING',
+        'VERIFIED', 'FAILED', 'ROLLBACK_PENDING', 'ROLLING_BACK',
+        'ROLLED_BACK', 'MANUAL_INTERVENTION_REQUIRED'
+    ];
+
+    const activeIdx = stagesOrder.indexOf(activeStage);
+
+    steps.forEach(step => {
+        const st = step.getAttribute('data-stage');
+        const stIdx = stagesOrder.indexOf(st);
+        step.classList.remove('active', 'completed');
+
+        if (st === activeStage) {
+            step.classList.add('active');
+        } else if (stIdx < activeIdx && activeIdx <= 8 && stIdx <= 8) {
+            step.classList.add('completed');
+        }
+    });
+}
+
+// ==========================================
+// Autonomy Policy Modal Handlers
+// ==========================================
+
+async function openAutonomyPolicyModal() {
+    try {
+        const res = await fetch('/api/self-healing/policies');
+        if (res.ok) {
+            const p = await res.json();
+            const lvlSelect = document.getElementById('policyAutonomyLevel');
+            if (lvlSelect) {
+                lvlSelect.value = p.autonomy_level;
+                updatePolicyLevelDesc(p.autonomy_level);
+            }
+            const maxRisk = document.getElementById('policyMaxRisk');
+            if (maxRisk) maxRisk.value = p.max_risk_level || 'HIGH';
+            const approvalAbove = document.getElementById('policyApprovalAbove');
+            if (approvalAbove) approvalAbove.value = p.require_approval_above_risk || 'LOW';
+            const actionList = document.getElementById('policyActionAllowlist');
+            if (actionList) actionList.value = (p.action_allowlist || []).join(', ');
+            const targetList = document.getElementById('policyTargetAllowlist');
+            if (targetList) targetList.value = (p.target_allowlist || []).join(', ');
+            const maxConc = document.getElementById('policyMaxConcurrent');
+            if (maxConc) maxConc.value = p.max_concurrent_operations || 5;
+            const timeout = document.getElementById('policyTimeoutSec');
+            if (timeout) timeout.value = p.max_execution_duration_sec || 300;
+        }
+    } catch (e) {
+        console.error('Error fetching policy:', e);
+    }
+    const modal = document.getElementById('modalAutonomyPolicy');
+    if (modal) modal.style.display = 'flex';
+}
+
+function closeAutonomyPolicyModal() {
+    const modal = document.getElementById('modalAutonomyPolicy');
+    if (modal) modal.style.display = 'none';
+}
+
+function updatePolicyLevelDesc(lvl) {
+    const box = document.getElementById('policyLevelDescBox');
+    if (!box) return;
+    const descs = {
+        '0': 'Level 0 — Monitor Only: Telemetry collected, root cause diagnosed. Zero state changes applied.',
+        '1': 'Level 1 — Recommend: Plans generated with explainable risk scores. Explicit analyst approval required to execute.',
+        '2': 'Level 2 — Approved Automation: Automatically executes Low-risk allowlisted actions (e.g. IP block). High risk requires approval.',
+        '3': 'Level 3 — Controlled Autonomous Response: Autonomously executes broader reversible actions. High/Critical triggers emergency gate.'
+    };
+    box.textContent = descs[String(lvl)] || '';
+}
+
+async function saveAutonomyPolicy() {
+    const autonomyLevel = parseInt(document.getElementById('policyAutonomyLevel')?.value || '1', 10);
+    const maxRisk = document.getElementById('policyMaxRisk')?.value || 'HIGH';
+    const approvalAbove = document.getElementById('policyApprovalAbove')?.value || 'LOW';
+    const actionsRaw = document.getElementById('policyActionAllowlist')?.value || '';
+    const targetsRaw = document.getElementById('policyTargetAllowlist')?.value || '';
+    const maxConc = parseInt(document.getElementById('policyMaxConcurrent')?.value || '5', 10);
+    const timeout = parseInt(document.getElementById('policyTimeoutSec')?.value || '300', 10);
+
+    const actionAllowlist = actionsRaw.split(',').map(s => s.trim()).filter(Boolean);
+    const targetAllowlist = targetsRaw.split(',').map(s => s.trim()).filter(Boolean);
+
+    try {
+        const res = await fetch('/api/self-healing/policies', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                autonomy_level: autonomyLevel,
+                action_allowlist: actionAllowlist,
+                target_allowlist: targetAllowlist,
+                max_risk_level: maxRisk,
+                require_approval_above_risk: approvalAbove,
+                max_concurrent_operations: maxConc,
+                max_execution_duration_sec: timeout,
+                actor: 'admin@sentinel.sec'
+            })
+        });
+
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || 'Failed to update policy');
+        }
+
+        toastr.success(`Autonomy Policy updated to Level ${autonomyLevel}.`, 'Policy Persisted');
+        closeAutonomyPolicyModal();
+        checkAutonomyPolicyStatus();
+    } catch (e) {
+        toastr.error(e.message, 'Policy Update Error');
+    }
+}
+
+// ==========================================
+// Emergency Stop Modal Handlers
+// ==========================================
+
+function openEmergencyStopModal() {
+    const modal = document.getElementById('modalEmergencyStop');
+    if (modal) modal.style.display = 'flex';
+}
+
+function closeEmergencyStopModal() {
+    const modal = document.getElementById('modalEmergencyStop');
+    if (modal) modal.style.display = 'none';
+}
+
+async function confirmEmergencyStop() {
+    const actor = document.getElementById('emergencyStopActor')?.value?.trim() || 'admin@sentinel.sec';
+    const reason = document.getElementById('emergencyStopReason')?.value?.trim();
+
+    if (!reason || reason.length < 5) {
+        toastr.warning('Please provide a mandatory audit explanation for Emergency Stop.', 'Reason Required');
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/self-healing/emergency-stop', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actor, reason })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Emergency stop failed');
+
+        toastr.error('EMERGENCY STOP ACTIVATED: Autonomous remediations halted.', 'Emergency Stop');
+        closeEmergencyStopModal();
+        loadSelfHealingDashboard();
+    } catch (e) {
+        toastr.error(e.message, 'Emergency Stop Error');
+    }
+}
+
+function openEmergencyResumeModal() {
+    const modal = document.getElementById('modalEmergencyResume');
+    if (modal) modal.style.display = 'flex';
+}
+
+function closeEmergencyResumeModal() {
+    const modal = document.getElementById('modalEmergencyResume');
+    if (modal) modal.style.display = 'none';
+}
+
+async function confirmEmergencyResume() {
+    const actor = document.getElementById('emergencyResumeActor')?.value?.trim() || 'admin@sentinel.sec';
+    const reason = document.getElementById('emergencyResumeReason')?.value?.trim() || 'Normal operations resumed';
+
+    try {
+        const res = await fetch('/api/self-healing/emergency-resume', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actor, reason })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Resume failed');
+
+        toastr.success('Emergency stop cleared. Autonomous remediation resumed.', 'Operations Restored');
+        closeEmergencyResumeModal();
+        loadSelfHealingDashboard();
+    } catch (e) {
+        toastr.error(e.message, 'Resume Error');
+    }
+}
+
+// ==========================================
+// New Remediation Session Modal Handlers
+// ==========================================
+
+async function openNewRemediationModal() {
+    const select = document.getElementById('newRemediationIncidentSelect');
+    const btn = document.getElementById('btnLaunchRemediation');
+    const preview = document.getElementById('newRemediationPreviewBox');
+    if (btn) btn.disabled = true;
+    if (preview) preview.style.display = 'none';
+
+    if (select) {
+        select.innerHTML = '<option value="">-- Choose Security Incident --</option>';
+        try {
+            const res = await fetch('/api/security/incidents');
+            if (res.ok) {
+                const incidents = await res.json();
+                incidents.forEach(inc => {
+                    const opt = document.createElement('option');
+                    opt.value = inc.incident_id;
+                    opt.textContent = `[${inc.incident_id}] ${inc.title} (${inc.severity})`;
+                    opt.dataset.incident = JSON.stringify(inc);
+                    select.appendChild(opt);
+                });
+            }
+        } catch (e) {
+            console.error('Error fetching incidents for remediation:', e);
+        }
+    }
+
+    const modal = document.getElementById('modalNewRemediation');
+    if (modal) modal.style.display = 'flex';
+}
+
+function closeNewRemediationModal() {
+    const modal = document.getElementById('modalNewRemediation');
+    if (modal) modal.style.display = 'none';
+}
+
+function onSelectRemediationIncident(incidentId) {
+    const select = document.getElementById('newRemediationIncidentSelect');
+    const btn = document.getElementById('btnLaunchRemediation');
+    const preview = document.getElementById('newRemediationPreviewBox');
+    if (!select || !btn) return;
+
+    if (!incidentId) {
+        btn.disabled = true;
+        if (preview) preview.style.display = 'none';
+        return;
+    }
+
+    const opt = select.selectedOptions[0];
+    if (opt && opt.dataset.incident) {
+        const inc = JSON.parse(opt.dataset.incident);
+        if (preview) {
+            preview.style.display = 'block';
+            document.getElementById('nrPreviewTitle').textContent = inc.title;
+            document.getElementById('nrPreviewMeta').textContent = `Severity: ${inc.severity} • Category: ${inc.category || 'THREAT'} • Source: ${inc.source_ip || '127.0.0.1'}`;
+            document.getElementById('nrPreviewDesc').textContent = inc.ai_summary || inc.description || 'Security telemetry anomaly requiring remediation.';
+        }
+        btn.disabled = false;
+    }
+}
+
+async function launchRemediationSession() {
+    const select = document.getElementById('newRemediationIncidentSelect');
+    const incidentId = select?.value;
+    if (!incidentId) return;
+
+    const opt = select.selectedOptions[0];
+    const inc = opt?.dataset.incident ? JSON.parse(opt.dataset.incident) : {};
+
+    try {
+        const res = await fetch('/api/self-healing/executions/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                incident_id: incidentId,
+                threat_category: inc.category || 'SUSPICIOUS_TRAFFIC',
+                severity: inc.severity || 'HIGH',
+                affected_asset: (inc.affected_endpoints && inc.affected_endpoints[0]) || 'ShopSphere Web App',
+                actor: 'admin@sentinel.sec'
+            })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Failed to create execution session');
+
+        toastr.success(`Execution session ${data.execution_id} initiated.`, 'Remediation Session Launched');
+        closeNewRemediationModal();
+        await loadSelfHealingDashboard();
+        inspectExecutionRca(data.execution_id);
+    } catch (e) {
+        toastr.error(e.message, 'Session Launch Error');
+    }
+}
+
+// ==========================================
+// Audit Trail Modal Handlers
+// ==========================================
+
+async function openExecutionAuditModal(executionId = null) {
+    const modal = document.getElementById('modalHealingAudit');
+    const tbody = document.getElementById('healingAuditTableBody');
+    if (modal) modal.style.display = 'flex';
+    if (!tbody) return;
+
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:20px;"><i class="fa-solid fa-spinner fa-spin"></i> Querying audit ledger...</td></tr>`;
+
+    try {
+        const url = executionId ? `/api/self-healing/audit-logs?execution_id=${encodeURIComponent(executionId)}` : '/api/self-healing/audit-logs?limit=50';
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Failed to fetch audit logs');
+        const logs = await res.json();
+
+        if (logs.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:20px; color:var(--text-muted);">No audit records found.</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = logs.map(l => `
+            <tr>
+                <td class="font-mono" style="font-size:0.7rem;">${escapeHtml(l.created_at || '')}</td>
+                <td><span class="badge badge-purple" style="font-size:0.65rem;">${escapeHtml(l.action_type || '')}</span></td>
+                <td class="font-mono text-cyan">${escapeHtml(l.execution_id || '-')}</td>
+                <td>${escapeHtml(l.actor || '')}</td>
+                <td class="font-mono" style="font-size:0.68rem; max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                    ${escapeHtml(JSON.stringify(l.details || {}))}
+                </td>
+            </tr>
+        `).join('');
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="5" style="color:var(--status-danger); padding:20px;">Error loading audit logs: ${escapeHtml(e.message)}</td></tr>`;
+    }
+}
+
+function closeHealingAuditModal() {
+    const modal = document.getElementById('modalHealingAudit');
+    if (modal) modal.style.display = 'none';
+}
+
+// ==========================================
+// AI Self-Healing Assistant Handlers
+// ==========================================
+
+function toggleHealingAIAssistant() {
+    const drawer = document.getElementById('drawerHealingAI');
+    if (!drawer) return;
+    drawer.style.display = drawer.style.display === 'none' ? 'flex' : 'none';
+}
+
+function sendHealingAiPrompt(query) {
+    const input = document.getElementById('shAiInput');
+    if (input) {
+        input.value = query;
+        submitHealingAiQuery();
+    }
+}
+
+async function submitHealingAiQuery() {
+    const input = document.getElementById('shAiInput');
+    const stream = document.getElementById('shAiChatStream');
+    if (!input || !stream) return;
+
+    const query = input.value.trim();
+    if (!query) return;
+
+    // Append user message
+    stream.innerHTML += `
+        <div class="sh-ai-msg user">
+            <div class="sh-ai-bubble">${escapeHtml(query)}</div>
+        </div>
+    `;
+    input.value = '';
+    stream.scrollTop = stream.scrollHeight;
+
+    // Placeholder bot bubble
+    const botMsgId = `bot_${Date.now()}`;
+    stream.innerHTML += `
+        <div class="sh-ai-msg bot" id="${botMsgId}">
+            <div class="sh-ai-bubble"><i class="fa-solid fa-spinner fa-spin"></i> Analyzing evidence and risk vectors...</div>
+        </div>
+    `;
+    stream.scrollTop = stream.scrollHeight;
+
+    try {
+        const res = await fetch('/api/self-healing/ai-assistant', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                query: query,
+                incident_id: shActiveIncidentId,
+                execution_id: shActiveExecutionId
+            })
+        });
+
+        const data = await res.json();
+        const botEl = document.getElementById(botMsgId);
+        if (botEl) {
+            const steps = (data.recommended_next_steps || []).map(s => `<li>${escapeHtml(s)}</li>`).join('');
+            botEl.innerHTML = `
+                <div class="sh-ai-bubble">
+                    <div style="margin-bottom:8px; line-height:1.45;">${escapeHtml(data.ai_response || '').replace(/\n/g, '<br>')}</div>
+                    ${steps ? `<div style="font-size:0.7rem; color:var(--accent-cyan); font-weight:700; margin-top:6px;">Recommended Actions:</div><ul style="padding-left:16px; margin:4px 0; font-size:0.7rem;">${steps}</ul>` : ''}
+                    <div style="font-size:0.65rem; color:var(--text-muted); margin-top:6px; border-top:1px solid var(--border-subtle); padding-top:4px;">
+                        ${escapeHtml(data.distinction_note || '')}
+                    </div>
+                </div>
+            `;
+        }
+        stream.scrollTop = stream.scrollHeight;
+    } catch (e) {
+        const botEl = document.getElementById(botMsgId);
+        if (botEl) {
+            botEl.innerHTML = `<div class="sh-ai-bubble" style="color:var(--status-danger);">AI advisor request failed: ${escapeHtml(e.message)}</div>`;
+        }
+    }
+}

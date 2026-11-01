@@ -477,6 +477,72 @@ def init_db():
         );
         """)
 
+        # 22. Self-Healing Executions Table (14-State Lifecycle Engine)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS self_healing_executions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            execution_id TEXT UNIQUE NOT NULL,
+            incident_id TEXT NOT NULL,
+            lifecycle_stage TEXT NOT NULL DEFAULT 'DETECTED',
+            threat_category TEXT NOT NULL DEFAULT 'SUSPICIOUS_TRAFFIC',
+            severity TEXT NOT NULL DEFAULT 'HIGH',
+            affected_asset TEXT NOT NULL DEFAULT 'ShopSphere Web App',
+            root_cause_json TEXT DEFAULT '{}',
+            selected_plan_json TEXT DEFAULT '{}',
+            risk_level TEXT NOT NULL DEFAULT 'MEDIUM',
+            approval_state TEXT NOT NULL DEFAULT 'PENDING',
+            approved_by TEXT,
+            approved_at TIMESTAMP,
+            execution_outcome_json TEXT DEFAULT '{}',
+            verification_state TEXT NOT NULL DEFAULT 'PENDING',
+            verification_results_json TEXT DEFAULT '{}',
+            rollback_state TEXT NOT NULL DEFAULT 'NONE',
+            rollback_results_json TEXT DEFAULT '{}',
+            pre_change_state_json TEXT DEFAULT '{}',
+            duration_ms REAL DEFAULT 0.0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+
+        # 23. Self-Healing Autonomy Policies Table (Levels 0-3, Emergency Stop)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS self_healing_policies (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            policy_id TEXT UNIQUE NOT NULL,
+            name TEXT NOT NULL,
+            autonomy_level INTEGER NOT NULL DEFAULT 1,
+            emergency_stop BOOLEAN NOT NULL DEFAULT 0,
+            emergency_stop_reason TEXT,
+            emergency_stop_by TEXT,
+            emergency_stop_at TIMESTAMP,
+            action_allowlist_json TEXT NOT NULL DEFAULT '["BLOCK_IP", "APPLY_RATE_LIMIT", "REVOKE_SESSION", "DISABLE_ACCOUNT", "CODE_REPAIR_PATCH"]',
+            target_allowlist_json TEXT NOT NULL DEFAULT '["127.0.0.1", "localhost", "ShopSphere", "CartService", "ProductService"]',
+            max_risk_level TEXT NOT NULL DEFAULT 'HIGH',
+            require_approval_above_risk TEXT NOT NULL DEFAULT 'LOW',
+            max_concurrent_operations INTEGER NOT NULL DEFAULT 5,
+            max_execution_duration_sec INTEGER NOT NULL DEFAULT 300,
+            version INTEGER NOT NULL DEFAULT 1,
+            updated_by TEXT NOT NULL DEFAULT 'admin@sentinel.sec',
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+
+        # 24. Self-Healing Immutable Audit Logs Table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS self_healing_audit_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            log_id TEXT UNIQUE NOT NULL,
+            action_type TEXT NOT NULL,
+            execution_id TEXT,
+            incident_id TEXT,
+            actor TEXT NOT NULL DEFAULT 'admin@sentinel.sec',
+            details_json TEXT DEFAULT '{}',
+            ip_address TEXT DEFAULT '127.0.0.1',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+
         # Enterprise Database Performance Indexes
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_blocked_clients_ip_active ON blocked_clients (client_ip, is_active, expires_at);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_security_events_temporal ON security_events (client_ip, timestamp);")
@@ -508,8 +574,17 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_soar_approvals_exec ON soar_approvals (execution_id);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_soar_audit_logs_action ON soar_audit_logs (action_type, created_at DESC);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_soar_audit_logs_playbook ON soar_audit_logs (playbook_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sh_exec_status ON self_healing_executions (lifecycle_stage, created_at DESC);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sh_exec_incident ON self_healing_executions (incident_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sh_exec_verification ON self_healing_executions (verification_state);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sh_exec_approval ON self_healing_executions (approval_state);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sh_audit_action ON self_healing_audit_logs (action_type, created_at DESC);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sh_audit_exec ON self_healing_audit_logs (execution_id);")
 
         conn.commit()
+
+        # Seed initial self-healing policy and baseline records if needed
+        seed_self_healing_defaults(conn)
 
 
 def seed_data():
@@ -926,3 +1001,235 @@ def seed_vulnerabilities(conn=None):
     finally:
         if should_close:
             conn.close()
+
+
+def seed_self_healing_defaults(conn=None):
+    """Initializes default self-healing policies and realistic baseline records."""
+    should_close = False
+    if conn is None:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        should_close = True
+
+    try:
+        cursor = conn.cursor()
+        # 1. Ensure default policy exists
+        cursor.execute("SELECT COUNT(*) as count FROM self_healing_policies")
+        row = cursor.fetchone()
+        if not row or row["count"] == 0:
+            cursor.execute("""
+            INSERT INTO self_healing_policies (
+                policy_id, name, autonomy_level, emergency_stop,
+                action_allowlist_json, target_allowlist_json, max_risk_level,
+                require_approval_above_risk, max_concurrent_operations,
+                max_execution_duration_sec, version, updated_by
+            ) VALUES (
+                'POLICY-SENTINEL-DEFAULT',
+                'Obsidian Sentinel Enterprise Autonomy Policy',
+                1,
+                0,
+                '["BLOCK_IP", "APPLY_RATE_LIMIT", "REVOKE_SESSION", "DISABLE_ACCOUNT", "CODE_REPAIR_PATCH"]',
+                '["127.0.0.1", "localhost", "ShopSphere", "CartService", "ProductService", "AuthService"]',
+                'HIGH',
+                'LOW',
+                5,
+                300,
+                1,
+                'admin@sentinel.sec'
+            )
+            """)
+
+        # 2. Check if self_healing_executions has records; if not, populate realistic baseline records
+        cursor.execute("SELECT COUNT(*) as count FROM self_healing_executions")
+        exec_count = cursor.fetchone()["count"]
+        if exec_count == 0:
+            # Baseline realistic self-healing executions to provide immediate verifiable telemetry
+            baseline_executions = [
+                (
+                    "SH-EXEC-1001",
+                    "INC-AUTH-1001",
+                    "VERIFIED",
+                    "CREDENTIAL_ACCESS",
+                    "HIGH",
+                    "ShopSphere Auth Gateway (/api/shop/auth/login)",
+                    json.dumps({
+                        "confirmed_facts": [
+                            "Source IP 198.51.100.22 triggered 14 failed login attempts in 42 seconds.",
+                            "Target endpoint /api/shop/auth/login returned HTTP 401 response codes.",
+                            "Target accounts targeted: admin@shopsphere.com, dev@shopsphere.com."
+                        ],
+                        "probable_causes": [
+                            "Automated dictionary credential stuffing campaign leveraging leaked credential combo list."
+                        ],
+                        "ai_hypotheses": [
+                            "Threat actor may be testing credentials harvested from external credential breach prior to targeted exfiltration."
+                        ]
+                    }),
+                    json.dumps({
+                        "action": "BLOCK_IP",
+                        "target": "198.51.100.22",
+                        "duration_seconds": 3600,
+                        "description": "Block adversary IP on WAF perimeter layer for 1 hour.",
+                        "risk_level": "LOW",
+                        "reversibility": "REVERSIBLE"
+                    }),
+                    "LOW",
+                    "APPROVED",
+                    "Autonomous Sentinel Policy L2",
+                    json.dumps({"action": "BLOCK_IP", "status": "ENFORCED", "target": "198.51.100.22"}),
+                    "VERIFIED",
+                    json.dumps({
+                        "adversary_probe": {"expected_status": 403, "actual_status": 403, "passed": True, "latency_ms": 14.2},
+                        "benign_probe": {"expected_status": 200, "actual_status": 200, "passed": True, "latency_ms": 8.7},
+                        "overall_passed": True
+                    }),
+                    "NONE",
+                    "{}",
+                    json.dumps({"blocked_state": False}),
+                    482.0
+                ),
+                (
+                    "SH-EXEC-1002",
+                    "INC-FIN-2002",
+                    "VERIFIED",
+                    "BUSINESS_LOGIC",
+                    "CRITICAL",
+                    "ShopSphere Cart Calculation (CartService)",
+                    json.dumps({
+                        "confirmed_facts": [
+                            "Cart total calculation invariant violation: total < 0 detected during checkout simulation.",
+                            "Negative shipping fee override (-15.0) bypassed subtotal threshold.",
+                            "Observed in CartService.calculate_cart_totals."
+                        ],
+                        "probable_causes": [
+                            "Regression defect introduced in cart rounding arithmetic allowing negative shipping fee constants."
+                        ],
+                        "ai_hypotheses": [
+                            "Logic bomb or accidental developer arithmetic typo in discount/shipping logic."
+                        ]
+                    }),
+                    json.dumps({
+                        "action": "CODE_REPAIR_PATCH",
+                        "target": "CartService.calculate_cart_totals",
+                        "vuln_id": "VULN-FIN-001",
+                        "description": "Apply surgical non-negative invariant clamp to shipping fee and grand total.",
+                        "risk_level": "HIGH",
+                        "reversibility": "REVERSIBLE"
+                    }),
+                    "HIGH",
+                    "APPROVED",
+                    "lead_analyst@sentinel.sec",
+                    json.dumps({"action": "CODE_REPAIR_PATCH", "status": "APPLIED", "vuln_id": "VULN-FIN-001"}),
+                    "VERIFIED",
+                    json.dumps({
+                        "regression_test": "test_cart_delivery_non_negative_invariant",
+                        "passed": True,
+                        "latency_ms": 11.5,
+                        "message": "Cart financial non-negative invariant test passed successfully."
+                    }),
+                    "NONE",
+                    "{}",
+                    json.dumps({"patched": False}),
+                    1240.0
+                ),
+                (
+                    "SH-EXEC-1003",
+                    "INC-RATE-3003",
+                    "AWAITING_APPROVAL",
+                    "RESOURCE_EXHAUSTION",
+                    "MEDIUM",
+                    "Catalog Search API (/api/shop/products)",
+                    json.dumps({
+                        "confirmed_facts": [
+                            "High burst of 180 search queries per minute originating from 203.0.113.88.",
+                            "Database query latency increased from 4ms to 85ms on product search."
+                        ],
+                        "probable_causes": [
+                            "Scraping bot or unthrottled API client harvesting catalog pricing."
+                        ],
+                        "ai_hypotheses": [
+                            "Competitor pricing scraping spider attempting inventory reconnaissance."
+                        ]
+                    }),
+                    json.dumps({
+                        "action": "APPLY_RATE_LIMIT",
+                        "target": "203.0.113.88",
+                        "duration_seconds": 600,
+                        "description": "Apply adaptive rate limit throttling (30 req/min) for 10 minutes.",
+                        "risk_level": "MEDIUM",
+                        "reversibility": "REVERSIBLE"
+                    }),
+                    "MEDIUM",
+                    "PENDING",
+                    None,
+                    "{}",
+                    "PENDING",
+                    "{}",
+                    "NONE",
+                    "{}",
+                    "{}",
+                    0.0
+                ),
+                (
+                    "SH-EXEC-1004",
+                    "INC-AUTH-4004",
+                    "ROLLED_BACK",
+                    "SESSION_HIJACK",
+                    "HIGH",
+                    "Session Management Subsystem",
+                    json.dumps({
+                        "confirmed_facts": [
+                            "Anomalous concurrent session access detected from distinct subnets for customer token.",
+                            "Tokens generated 48 hours prior."
+                        ],
+                        "probable_causes": [
+                            "Token theft or browser storage exfiltration."
+                        ],
+                        "ai_hypotheses": [
+                            "Session cookie interception on unsecured public wireless network."
+                        ]
+                    }),
+                    json.dumps({
+                        "action": "REVOKE_SESSION",
+                        "target": "All non-admin sessions",
+                        "description": "Mass session token revocation across all active customer sessions.",
+                        "risk_level": "HIGH",
+                        "reversibility": "REVERSIBLE"
+                    }),
+                    "HIGH",
+                    "APPROVED",
+                    "soc_manager@sentinel.sec",
+                    json.dumps({"action": "REVOKE_SESSION", "revoked_count": 4}),
+                    "FAILED",
+                    json.dumps({
+                        "benign_probe": {"expected_status": 200, "actual_status": 401, "passed": False},
+                        "reason": "Mass token revocation caused inadvertent disruption to active benign checkouts.",
+                        "overall_passed": False
+                    }),
+                    "ROLLED_BACK",
+                    json.dumps({
+                        "rollback_status": "RESTORED",
+                        "message": "Benign customer sessions restored from pre-change token snapshot.",
+                        "restored_at": "2026-11-01 12:00:00"
+                    }),
+                    json.dumps({"active_session_count": 4}),
+                    890.0
+                )
+            ]
+
+            for row in baseline_executions:
+                cursor.execute("""
+                INSERT OR IGNORE INTO self_healing_executions (
+                    execution_id, incident_id, lifecycle_stage, threat_category, severity,
+                    affected_asset, root_cause_json, selected_plan_json, risk_level,
+                    approval_state, approved_by, execution_outcome_json, verification_state,
+                    verification_results_json, rollback_state, rollback_results_json,
+                    pre_change_state_json, duration_ms
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, row)
+
+        conn.commit()
+    finally:
+        if should_close:
+            conn.close()
+

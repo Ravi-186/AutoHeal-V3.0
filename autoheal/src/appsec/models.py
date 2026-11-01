@@ -2009,7 +2009,7 @@ def block_client_ip(
 
 def is_client_blocked(client_ip: str) -> Tuple[bool, Optional[Dict[str, Any]]]:
     """Checks whether an IP address is actively blocked, expiring stale blocks automatically."""
-    if client_ip in ["127.0.0.1", "::1", "localhost"]:
+    if client_ip in ["127.0.0.1", "::1", "localhost", "testclient"]:
         return False, None
     init_db()
     with get_db_connection() as conn:

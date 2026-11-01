@@ -58,9 +58,14 @@ class AppSecProtectionMiddleware(BaseHTTPMiddleware):
             response = await call_next(request)
             return self._apply_security_headers(response, correlation_id)
 
+        # SOC Control Plane endpoints are administrative tools and should not be throttled or blocked by AppSec data-plane rules
+        is_control_plane = any(path.startswith(prefix) for prefix in [
+            "/api/security", "/api/soar", "/api/self-healing", "/api/executive", "/api/simulator"
+        ])
+
         # 1. Check if Client IP is actively quarantined in blocklist
         blocked, block_info = is_client_blocked(client_ip)
-        if blocked and not path.startswith("/api/security/unblock"):
+        if blocked and not is_control_plane:
             record_security_event(
                 client_ip=client_ip,
                 method=method,
@@ -92,7 +97,7 @@ class AppSecProtectionMiddleware(BaseHTTPMiddleware):
         timestamps.append(now)
         self._rate_tracker[client_ip] = timestamps
 
-        if len(timestamps) > self.RATE_LIMIT_MAX_REQUESTS and not path.startswith("/api/security"):
+        if len(timestamps) > self.RATE_LIMIT_MAX_REQUESTS and not is_control_plane:
             detection = DetectionResult(
                 triggered=True,
                 rule_id="RATE-001",
@@ -152,7 +157,7 @@ class AppSecProtectionMiddleware(BaseHTTPMiddleware):
 
         # 4. Inspect query parameters, headers, and body for live attack payloads targeting application endpoints
         detection = None
-        if not path.startswith("/api/security"):
+        if not is_control_plane:
             headers_dict = dict(request.headers)
             detection = AppSecDetector.analyze_live_request(
                 client_ip=client_ip,

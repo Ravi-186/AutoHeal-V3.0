@@ -92,9 +92,11 @@ app.include_router(shopsphere_router)
 from src.appsec.middleware import AppSecProtectionMiddleware
 from src.appsec.api import router as appsec_router
 from src.appsec.soar_api import router as soar_router
+from src.appsec.self_healing_api import router as self_healing_router
 app.add_middleware(AppSecProtectionMiddleware)
 app.include_router(appsec_router)
 app.include_router(soar_router)
+app.include_router(self_healing_router)
 
 # --- Web & Health Endpoints ---
 @app.get("/shop", summary="ShopSphere E-Commerce Live Application")
