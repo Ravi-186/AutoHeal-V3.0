@@ -88,6 +88,14 @@ document.addEventListener('DOMContentLoaded', function () {
     loadSelfHealingDashboard();
     loadIncidentReportsTable();
     pingAllServices();
+
+    // 5. Route-aware tab activation
+    const currentPath = (window.location.pathname || '').toLowerCase();
+    if (currentPath.includes('copilot')) {
+        switchToTab('pageSocCopilot');
+    } else if (currentPath.includes('topology')) {
+        switchToTab('pageThreatTopology');
+    }
 });
 
 // Update Live Clock
@@ -6833,7 +6841,6 @@ function closeSoarConfigDrawer() {
 // Toolbar Action Aliases for HTML markup onclick handlers
 function soarCanvasAutoLayout() { autoLayoutSoarWorkflow(); }
 function soarCanvasFitView() { fitSoarCanvasView(); }
-function soarCanvasZoom(delta) { zoomSoarCanvas(delta); }
 function soarCanvasUndo() { soarUndo(); }
 function soarCanvasRedo() { soarRedo(); }
 function toggleAccessibleNodeList() { toggleSoarAccessibleView(); }

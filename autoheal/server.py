@@ -125,6 +125,9 @@ async def serve_threat_topology(request: Request):
     return templates.TemplateResponse(request=request, name="index.html")
 
 @app.get("/soc-copilot", summary="AI SOC Copilot Workspace")
+@app.get("/soc copilot", include_in_schema=False)
+@app.get("/soc%20copilot", include_in_schema=False)
+@app.get("/soc_copilot", include_in_schema=False)
 async def serve_soc_copilot(request: Request):
     """Direct route serving the AI SOC Copilot analyst workspace."""
     if not templates:
