@@ -2,19 +2,19 @@ import sys
 import os
 import time
 import unittest
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 # Global flag for controlled bug injection in isolated test demonstrations
 SIMULATE_CART_BUG = False
 
 
-def calculate_cart_totals_with_healing(items: List[Dict[str, Any]]) -> Dict[str, Any]:
+def calculate_cart_totals_with_healing(items: List[Dict[str, Any]], coupon_code: Optional[str] = None) -> Dict[str, Any]:
     """
     Wrapper around cart totals calculation that respects SIMULATE_CART_BUG
     for the isolated AutoHeal demonstration.
     """
     from shopsphere.services import CartService
-    totals = CartService.calculate_cart_totals(items)
+    totals = CartService.calculate_cart_totals(items, coupon_code=coupon_code)
 
     if SIMULATE_CART_BUG:
         # CONTROLLED BUG: Delivery fee erroneously set to negative, corrupting final total calculation

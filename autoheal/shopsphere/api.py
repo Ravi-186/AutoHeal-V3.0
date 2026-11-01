@@ -9,7 +9,8 @@ from fastapi.responses import JSONResponse
 
 from shopsphere.services import (
     ProductService, CartService, WishlistService,
-    OrderService, UserService, AdminService
+    OrderService, UserService, AdminService,
+    CouponService, ReviewService, NotificationService
 )
 from shopsphere.autoheal_engine import AutoHealDemoEngine
 
@@ -30,6 +31,14 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: str
     password: str
+
+
+class ProfileUpdateRequest(BaseModel):
+    name: str = Field(..., min_length=2)
+    phone: Optional[str] = ""
+    address: Optional[str] = ""
+    city: Optional[str] = ""
+    pincode: Optional[str] = ""
 
 
 class CartItemRequest(BaseModel):
@@ -54,6 +63,34 @@ class WishlistToggleRequest(BaseModel):
     product_id: int
 
 
+class ApplyCouponRequest(BaseModel):
+    session_id: Optional[str] = ""
+    coupon_code: str = Field(..., min_length=1)
+
+
+class CouponValidateRequest(BaseModel):
+    code: str = Field(..., min_length=1)
+    order_subtotal: float = Field(..., ge=0.0)
+
+
+class CouponCreateRequest(BaseModel):
+    code: str = Field(..., min_length=2)
+    discount_type: str = "PERCENTAGE"
+    discount_value: float = Field(..., gt=0.0)
+    min_order_amount: float = 0.0
+    max_discount_amount: Optional[float] = None
+    description: Optional[str] = ""
+    is_active: int = 1
+    usage_limit: int = 1000
+
+
+class ReviewCreateRequest(BaseModel):
+    rating: int = Field(..., ge=1, le=5)
+    headline: str = Field(..., min_length=2)
+    comment: str = Field(..., min_length=5)
+    author_name: Optional[str] = ""
+
+
 class CheckoutRequest(BaseModel):
     session_id: Optional[str] = ""
     customer_name: str
@@ -63,7 +100,7 @@ class CheckoutRequest(BaseModel):
     city: str
     pincode: str
     payment_method: str = "UPI / QR Code"
-
+    coupon_code: Optional[str] = None
 
 
 class AdminStockUpdateRequest(BaseModel):
@@ -128,12 +165,57 @@ def get_product(product_id: int):
     return prod
 
 
+@router.get("/products/{product_id}/reviews", summary="Get Customer Reviews for Product")
+def get_product_reviews(product_id: int):
+    return ReviewService.get_reviews_for_product(product_id)
+
+
+@router.post("/products/{product_id}/reviews", summary="Submit Product Review")
+def add_product_review(
+    product_id: int,
+    req: ReviewCreateRequest,
+    current_user: Optional[Dict[str, Any]] = Depends(get_current_user)
+):
+    try:
+        user_id = current_user["id"] if current_user else None
+        customer_email = current_user["email"] if current_user else None
+        author_name = req.author_name or (current_user["name"] if current_user else "Verified Shopper")
+        return ReviewService.add_review(
+            product_id=product_id,
+            author_name=author_name,
+            rating=req.rating,
+            headline=req.headline,
+            comment=req.comment,
+            user_id=user_id,
+            customer_email=customer_email
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.delete("/reviews/{review_id}", summary="Delete Review")
+def delete_review(
+    review_id: int,
+    current_user: Optional[Dict[str, Any]] = Depends(get_current_user)
+):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    is_admin = current_user.get("role") == "admin"
+    try:
+        success = ReviewService.delete_review(review_id, user_id=current_user["id"], is_admin=is_admin)
+        if not success:
+            raise HTTPException(status_code=404, detail="Review not found.")
+        return {"status": "success", "message": "Review deleted successfully."}
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+
+
 @router.get("/categories", summary="List All Categories")
 def get_categories():
     return ProductService.get_categories()
 
 
-# --- 2. Authentication Endpoints ---
+# --- 2. Authentication & Customer Profile Endpoints ---
 @router.post("/auth/register", summary="Register Customer Account")
 def register(req: RegisterRequest):
     try:
@@ -167,6 +249,27 @@ def get_me(current_user: Optional[Dict[str, Any]] = Depends(get_current_user)):
     return current_user
 
 
+@router.put("/auth/profile", summary="Update Customer Profile")
+def update_profile(
+    req: ProfileUpdateRequest,
+    current_user: Optional[Dict[str, Any]] = Depends(get_current_user)
+):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    try:
+        updated = UserService.update_profile(
+            user_id=current_user["id"],
+            name=req.name,
+            phone=req.phone or "",
+            address=req.address or "",
+            city=req.city or "",
+            pincode=req.pincode or ""
+        )
+        return {"status": "success", "user": updated}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.post("/auth/logout", summary="Logout and Revoke Session Token")
 def logout(authorization: Optional[str] = Header(None)):
     if not authorization:
@@ -178,16 +281,17 @@ def logout(authorization: Optional[str] = Header(None)):
     return {"status": "success", "message": "Session token successfully revoked."}
 
 
-# --- 3. Shopping Cart Endpoints ---
+# --- 3. Shopping Cart & Coupons Endpoints ---
 @router.get("/cart", summary="Retrieve Shopping Cart")
 def get_cart(
     session_id: Optional[str] = Query(None),
+    coupon_code: Optional[str] = Query(None),
     x_session_id: Optional[str] = Header(None, alias="X-Session-ID")
 ):
     sid = session_id or x_session_id
     if not sid:
         raise HTTPException(status_code=400, detail="session_id query parameter or X-Session-ID header is required.")
-    return CartService.get_cart(sid)
+    return CartService.get_cart(sid, coupon_code=coupon_code)
 
 
 @router.post("/cart/add", summary="Add Product to Cart")
@@ -244,7 +348,36 @@ def clear_cart(
     return {"status": "success", "message": "Cart cleared."}
 
 
-# --- 4. Wishlist Endpoints ---
+@router.post("/cart/apply-coupon", summary="Validate and Apply Coupon to Cart")
+def apply_cart_coupon(
+    req: ApplyCouponRequest,
+    x_session_id: Optional[str] = Header(None, alias="X-Session-ID")
+):
+    sid = req.session_id or x_session_id
+    if not sid:
+        raise HTTPException(status_code=400, detail="session_id is required.")
+    cart = CartService.get_cart(sid, coupon_code=req.coupon_code)
+    if not cart.get("coupon_code"):
+        validation = CouponService.validate_coupon(req.coupon_code, cart.get("subtotal", 0.0))
+        raise HTTPException(status_code=400, detail=validation.get("message", "Invalid coupon."))
+    return {"status": "success", "cart": cart}
+
+
+# --- 4. Coupons & Promotions Endpoints ---
+@router.post("/coupons/validate", summary="Validate Promotional Coupon")
+def validate_coupon(req: CouponValidateRequest):
+    result = CouponService.validate_coupon(req.code, req.order_subtotal)
+    if not result["valid"]:
+        raise HTTPException(status_code=400, detail=result["message"])
+    return result
+
+
+@router.get("/coupons", summary="List Active Promotional Coupons")
+def list_active_coupons():
+    return CouponService.list_coupons(active_only=True)
+
+
+# --- 5. Wishlist Endpoints ---
 @router.get("/wishlist", summary="Get Customer Wishlist")
 def get_wishlist(
     session_id: Optional[str] = Query(None),
@@ -278,7 +411,7 @@ def move_wishlist_to_cart(
     return WishlistService.move_to_cart(sid, req.product_id)
 
 
-# --- 5. Checkout & Orders Endpoints ---
+# --- 6. Checkout & Orders Endpoints ---
 @router.post("/checkout", summary="Complete Demo Order Checkout")
 @router.post("/cart/checkout", summary="Complete Demo Order Checkout (Cart Alias)")
 def checkout(
@@ -300,7 +433,8 @@ def checkout(
             city=req.city,
             pincode=req.pincode,
             payment_method=req.payment_method,
-            user_id=user_id
+            user_id=user_id,
+            coupon_code=req.coupon_code
         )
         return {
             "status": "success",
@@ -351,10 +485,78 @@ def cancel_order(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-# --- 6. Admin Portal Endpoints ---
+# --- 7. Customer Notifications Endpoints ---
+@router.get("/notifications", summary="Get Customer In-App Notifications")
+def get_notifications(
+    email: Optional[str] = Query(None),
+    current_user: Optional[Dict[str, Any]] = Depends(get_current_user)
+):
+    user_id = current_user["id"] if current_user else None
+    user_email = email or (current_user["email"] if current_user else None)
+    return NotificationService.get_notifications(user_id=user_id, email=user_email)
+
+
+@router.post("/notifications/{notification_id}/read", summary="Mark Notification as Read")
+def mark_notification_read(notification_id: int):
+    success = NotificationService.mark_as_read(notification_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Notification not found.")
+    return {"status": "success", "message": "Notification marked as read."}
+
+
+@router.post("/notifications/read-all", summary="Mark All Notifications as Read")
+def mark_all_notifications_read(
+    email: Optional[str] = Query(None),
+    current_user: Optional[Dict[str, Any]] = Depends(get_current_user)
+):
+    user_id = current_user["id"] if current_user else None
+    user_email = email or (current_user["email"] if current_user else None)
+    NotificationService.mark_all_read(user_id=user_id, email=user_email)
+    return {"status": "success", "message": "All notifications marked as read."}
+
+
+# --- 8. Admin Portal Endpoints ---
 @router.get("/admin/stats", summary="Get Admin Dashboard Metrics")
 def get_admin_metrics(admin: Dict[str, Any] = Depends(require_admin_user)):
     return AdminService.get_dashboard_metrics()
+
+
+@router.get("/admin/orders", summary="Admin List All Orders")
+def list_admin_orders(
+    status_filter: Optional[str] = Query(None),
+    admin: Dict[str, Any] = Depends(require_admin_user)
+):
+    return AdminService.list_all_orders(status_filter=status_filter)
+
+
+@router.get("/admin/customers", summary="Admin List All Customers")
+def list_admin_customers(admin: Dict[str, Any] = Depends(require_admin_user)):
+    return AdminService.list_all_customers()
+
+
+@router.get("/admin/coupons", summary="Admin List All Coupons")
+def list_admin_coupons(admin: Dict[str, Any] = Depends(require_admin_user)):
+    return CouponService.list_coupons(active_only=False)
+
+
+@router.post("/admin/coupons", summary="Admin Create or Update Coupon")
+def create_admin_coupon(
+    req: CouponCreateRequest,
+    admin: Dict[str, Any] = Depends(require_admin_user)
+):
+    try:
+        return CouponService.create_or_update_coupon(
+            code=req.code,
+            discount_type=req.discount_type,
+            discount_value=req.discount_value,
+            min_order_amount=req.min_order_amount,
+            max_discount_amount=req.max_discount_amount,
+            description=req.description or "",
+            is_active=req.is_active,
+            usage_limit=req.usage_limit
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/admin/products/{product_id}/stock", summary="Update Product Stock Inventory")
@@ -380,7 +582,7 @@ def update_order_fulfillment(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-# --- 7. AutoHeal Demonstration Endpoints ---
+# --- 9. AutoHeal Demonstration Endpoints ---
 @router.get("/autoheal/status", summary="Get AutoHeal Engine Status")
 def autoheal_status():
     return AutoHealDemoEngine.get_status()

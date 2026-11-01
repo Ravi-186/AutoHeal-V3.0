@@ -577,6 +577,70 @@ def init_db():
         );
         """)
 
+        # 27. Product Reviews & Customer Feedback Table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS product_reviews (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            product_id INTEGER NOT NULL,
+            user_id INTEGER,
+            author_name TEXT NOT NULL,
+            rating INTEGER NOT NULL CHECK(rating >= 1 AND rating <= 5),
+            headline TEXT NOT NULL,
+            comment TEXT NOT NULL,
+            is_verified_purchase INTEGER NOT NULL DEFAULT 0,
+            helpful_votes INTEGER NOT NULL DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(product_id) REFERENCES products(id) ON DELETE CASCADE,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
+        );
+        """)
+
+        # 28. Promotional Coupons & Discount Offers Table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS coupons (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT UNIQUE NOT NULL,
+            discount_type TEXT NOT NULL DEFAULT 'PERCENTAGE', -- PERCENTAGE or FIXED
+            discount_value REAL NOT NULL,
+            min_order_amount REAL NOT NULL DEFAULT 0.0,
+            max_discount_amount REAL,
+            description TEXT NOT NULL,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            usage_count INTEGER NOT NULL DEFAULT 0,
+            usage_limit INTEGER NOT NULL DEFAULT 1000,
+            valid_until TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+
+        # 29. Customer & Admin In-App Notifications Table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS customer_notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            customer_email TEXT,
+            title TEXT NOT NULL,
+            message TEXT NOT NULL,
+            notification_type TEXT NOT NULL DEFAULT 'ORDER_UPDATE',
+            is_read INTEGER NOT NULL DEFAULT 0,
+            link_url TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        """)
+
+        # Schema Migrations for Phase 9
+        for col_def in [
+            ("orders", "coupon_code", "TEXT"),
+            ("orders", "coupon_discount", "REAL DEFAULT 0.0"),
+            ("products", "brand", "TEXT DEFAULT 'ShopSphere'"),
+            ("products", "gallery_images_json", "TEXT DEFAULT '[]'")
+        ]:
+            try:
+                cursor.execute(f"ALTER TABLE {col_def[0]} ADD COLUMN {col_def[1]} {col_def[2]};")
+            except Exception:
+                pass
+
         # Enterprise Database Performance Indexes
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_blocked_clients_ip_active ON blocked_clients (client_ip, is_active, expires_at);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_security_events_temporal ON security_events (client_ip, timestamp);")
@@ -618,12 +682,17 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_copilot_incident ON soc_copilot_conversations (incident_id);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_incident_reports_inc ON incident_reports (incident_id, created_at DESC);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_incident_reports_status ON incident_reports (status);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_product_reviews_prod ON product_reviews (product_id, rating DESC);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_coupons_code ON coupons (code, is_active);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_notifications_user ON customer_notifications (user_id, is_read, created_at DESC);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_notifications_email ON customer_notifications (customer_email, is_read, created_at DESC);")
 
         conn.commit()
 
-        # Seed initial self-healing policy and baseline records if needed
+        # Seed initial self-healing policy, copilot, and e-commerce defaults if needed
         seed_self_healing_defaults(conn)
         seed_copilot_and_reports_defaults(conn)
+        seed_phase_9_e_commerce_defaults(conn)
 
 
 def seed_data():
@@ -1402,5 +1471,81 @@ def seed_copilot_and_reports_defaults(conn: Optional[sqlite3.Connection] = None)
     finally:
         if should_close:
             conn.close()
+
+
+def seed_phase_9_e_commerce_defaults(conn=None):
+    """Seeds baseline coupons, customer reviews, and initial notifications for Phase 9."""
+    should_close = False
+    if conn is None:
+        conn = sqlite3.connect(DB_PATH, timeout=30.0)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode = WAL;")
+        should_close = True
+
+    try:
+        cursor = conn.cursor()
+
+        # 1. Baseline Promotional Coupons
+        cursor.execute("SELECT COUNT(*) FROM coupons")
+        if cursor.fetchone()[0] == 0:
+            coupons = [
+                ("WELCOME10", "PERCENTAGE", 10.0, 500.0, 1000.0, "Welcome offer: 10% off on your order above ₹500 (Max ₹1,000)", 1, 0, 1000),
+                ("SAVE20", "PERCENTAGE", 20.0, 2000.0, 3000.0, "Super Saver: 20% off on orders above ₹2,000 (Max ₹3,000)", 1, 0, 500),
+                ("FESTIVE50", "FIXED", 500.0, 5000.0, 500.0, "Festive Bonus: Flat ₹500 off on premium orders above ₹5,000", 1, 0, 250)
+            ]
+            for c in coupons:
+                cursor.execute("""
+                INSERT OR IGNORE INTO coupons (
+                    code, discount_type, discount_value, min_order_amount,
+                    max_discount_amount, description, is_active, usage_count, usage_limit
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, c)
+
+        # 2. Baseline Product Reviews
+        cursor.execute("SELECT COUNT(*) FROM product_reviews")
+        if cursor.fetchone()[0] == 0:
+            reviews = [
+                # iPhone 15 (Product 1)
+                (1, None, "Aarav Patel", 5, "Unmatched Performance & Dynamic Island", "The dynamic island makes multitasking effortless and the 48MP camera captures exceptional detail. Battery comfortably lasts all day.", 1, 38),
+                (1, None, "Sneha Kulkarni", 5, "Finally USB-C and Premium Finish", "The frosted glass back feels incredible in hand. Lightning fast shipping by ShopSphere, arrived in pristine packaging.", 1, 19),
+                (1, None, "Vikram Malhotra", 4, "Great Upgrade from iPhone 12", "Noticeable speed bump and screen brightness in direct sunlight is fantastic. Wish it came with 120Hz ProMotion though.", 1, 12),
+
+                # MacBook Air (Product 2)
+                (2, None, "Priya Sundaram", 5, "Silent Powerhouse for Engineering", "Runs Docker, Node, and multiple IDEs simultaneously without a single drop in performance or heat. Battery life is easily 16+ hours.", 1, 45),
+                (2, None, "Karan Mehta", 5, "Best Laptop I Have Owned", "The Liquid Retina display is gorgeous, trackpad is unmatched, and MagSafe 3 charging is so convenient.", 1, 24),
+
+                # Sony Headphones (Product 3)
+                (3, None, "Rohan Das", 5, "Class-Leading Active Noise Cancellation", "Cuts out ambient flight and train noise completely. Multipoint Bluetooth connectivity lets me switch between laptop and phone seamlessly.", 1, 32),
+                (3, None, "Ananya Roy", 4, "Crystal Clear Sound Quality", "Rich bass and balanced highs. LDAC codec support makes high-res lossless streaming sound sublime. Earcups are very plush.", 1, 15),
+
+                # Samsung TV (Product 4)
+                (4, None, "Devendra Verma", 5, "Vibrant 4K Colors & Snappy UI", "The Crystal 4K processor upscales HD content brilliantly. Sound is punchy and gaming mode input latency is impressively low.", 1, 27)
+            ]
+            for r in reviews:
+                cursor.execute("""
+                INSERT INTO product_reviews (
+                    product_id, user_id, author_name, rating, headline, comment, is_verified_purchase, helpful_votes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, r)
+
+        # 3. Baseline In-App Notifications
+        cursor.execute("SELECT COUNT(*) FROM customer_notifications")
+        if cursor.fetchone()[0] == 0:
+            notifications = [
+                (None, "rahul.shopper@example.com", "Welcome to ShopSphere Premium!", "Explore top-rated electronics and fashion. Use code WELCOME10 for 10% off your next purchase.", "PROMOTION", 0, "/shop"),
+                (None, "admin@shopsphere.com", "AppSec Telemetry Integration Active", "AutoHeal Sentinel is actively monitoring ShopSphere storefront routes and transactions.", "SECURITY", 0, "/")
+            ]
+            for n in notifications:
+                cursor.execute("""
+                INSERT INTO customer_notifications (
+                    user_id, customer_email, title, message, notification_type, is_read, link_url
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, n)
+
+        conn.commit()
+    finally:
+        if should_close:
+            conn.close()
+
 
 
