@@ -855,7 +855,11 @@ def decide_approval(
 ) -> Dict[str, Any]:
     """Resolves an approval gate. Enforces single-use token and records audit decision."""
     dec_clean = decision.strip().upper()
-    if dec_clean not in ("APPROVED", "REJECTED"):
+    if dec_clean in ("APPROVE", "APPROVED"):
+        dec_clean = "APPROVED"
+    elif dec_clean in ("REJECT", "REJECTED"):
+        dec_clean = "REJECTED"
+    else:
         raise ValueError("Decision must be 'APPROVED' or 'REJECTED'.")
     if dec_clean == "REJECTED" and not reason.strip():
         raise ValueError("A mandatory rejection reason must be provided.")

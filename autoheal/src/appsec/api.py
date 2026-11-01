@@ -230,6 +230,61 @@ def list_events(
     return res
 
 
+@router.get("/events/export", summary="Export Security Events (CSV/JSON)")
+def export_security_events(
+    format: str = Query("csv", pattern="^(csv|json)$"),
+    limit: int = Query(1000, ge=1, le=10000),
+    search: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
+    severity: Optional[str] = Query(None),
+    rule_id: Optional[str] = Query(None),
+    client_ip: Optional[str] = Query(None),
+    action_taken: Optional[str] = Query(None),
+    time_range: Optional[str] = Query(None)
+):
+    """Explicit export route providing CSV or JSON export of telemetry events."""
+    effective_category = category
+    res = query_security_events_advanced(
+        page=1,
+        limit=limit,
+        search=search,
+        category=effective_category,
+        severity=severity,
+        rule_id=rule_id,
+        client_ip=client_ip,
+        action_taken=action_taken,
+        time_range=time_range,
+        sort_by="timestamp",
+        sort_order="desc"
+    )
+    if format == "csv":
+        import io
+        import csv
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["Timestamp", "Event ID", "Severity", "Event Type", "Method", "Path", "Status Code", "Client IP", "Action Taken", "Correlation ID"])
+        for ev in res["events"]:
+            writer.writerow([
+                ev.get("timestamp"),
+                ev.get("event_id"),
+                ev.get("severity"),
+                ev.get("event_type"),
+                ev.get("method"),
+                ev.get("path"),
+                ev.get("status_code"),
+                ev.get("client_ip"),
+                ev.get("action_taken"),
+                ev.get("correlation_id")
+            ])
+        csv_bytes = output.getvalue().encode("utf-8")
+        return Response(
+            content=csv_bytes,
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=sentinel_events_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"}
+        )
+    return res
+
+
 @router.get("/events/{event_id}", summary="Get Event Dossier")
 def get_event_detail(event_id: str):
     """Retrieves complete structured telemetry event, investigation status, detection rule, and related incident."""

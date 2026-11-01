@@ -110,6 +110,7 @@ async def serve_shopsphere(request: Request):
         return JSONResponse({"status": "error", "message": "Templates directory not found"})
     return templates.TemplateResponse(request=request, name="shopsphere.html")
 
+@app.get("/dashboard", summary="Serve Primary AutoHeal SOC Dashboard Alias")
 @app.get("/", summary="Serve Primary AutoHeal SOC Dashboard")
 async def serve_dashboard(request: Request):
     if not templates:
