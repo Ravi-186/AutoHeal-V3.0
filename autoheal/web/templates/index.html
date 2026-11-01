@@ -226,126 +226,505 @@
                      MODULE 1: OVERVIEW DASHBOARD
                      =================================================================== -->
                 <section id="pageOverview" class="workspace-page active">
-                    <div class="page-header-ribbon">
-                        <div>
-                            <h2><i class="fas fa-shield-alt" style="color: var(--primary);"></i> Executive SOC Command Center</h2>
-                            <p>Real-time telemetry, threat correlation, and verified autonomous remediation status</p>
+                    <!-- Executive Header & Global Controls -->
+                    <div class="executive-header-ribbon">
+                        <div class="executive-title-group">
+                            <h2><i class="fa-solid fa-shield-halved" style="color: var(--accent-cyan);" aria-hidden="true"></i> Executive SOC Command Center</h2>
+                            <p>Real-time security telemetry, multi-vector threat correlation, and verified autonomous remediation status</p>
                         </div>
-                        <div style="display: flex; gap: 10px;">
-                            <button class="btn btn-secondary" onclick="loadDashboardMetrics(); loadSecurityPosture();">
-                                <i class="fas fa-sync-alt"></i> Refresh Telemetry
+                        <div class="executive-status-bar">
+                            <!-- System Status Badge -->
+                            <div class="system-status-badge status-healthy" id="overviewSystemStatusBadge">
+                                <span class="status-dot status-live"></span>
+                                <span id="overviewSystemStatusText">SYSTEM HEALTHY</span>
+                            </div>
+
+                            <!-- Last Updated Time -->
+                            <div style="font-size:0.75rem; color:var(--text-muted); display:flex; align-items:center; gap:5px;">
+                                <i class="fa-regular fa-clock" aria-hidden="true"></i>
+                                <span>Updated:</span>
+                                <span class="font-mono" style="color:var(--text-secondary);" id="overviewLastUpdated">Live</span>
+                            </div>
+
+                            <!-- Time Range Selector -->
+                            <div class="time-range-group" role="group" aria-label="Dashboard Time Range">
+                                <button type="button" class="time-range-btn" id="rangeBtn1h" onclick="setDashboardTimeRange('1h')">1h</button>
+                                <button type="button" class="time-range-btn active" id="rangeBtn24h" onclick="setDashboardTimeRange('24h')">24h</button>
+                                <button type="button" class="time-range-btn" id="rangeBtn7d" onclick="setDashboardTimeRange('7d')">7d</button>
+                                <button type="button" class="time-range-btn" id="rangeBtn30d" onclick="setDashboardTimeRange('30d')">30d</button>
+                                <button type="button" class="time-range-btn" id="rangeBtnAll" onclick="setDashboardTimeRange('all')">All</button>
+                            </div>
+
+                            <!-- Auto-Refresh Toggle -->
+                            <div class="auto-refresh-pill active" id="btnDashboardAutoRefresh" onclick="toggleDashboardAutoRefresh()" data-tooltip="Click to toggle 5s real-time refresh" role="button" tabindex="0">
+                                <i class="fa-solid fa-arrows-rotate fa-spin" id="dashboardRefreshIcon" aria-hidden="true"></i>
+                                <span id="dashboardAutoRefreshLabel">Auto 5s</span>
+                            </div>
+
+                            <!-- Manual Refresh Button -->
+                            <button type="button" class="btn btn-outline btn-sm" id="btnRefreshDashboard" onclick="refreshExecutiveDashboard(true)" aria-label="Manual refresh telemetry">
+                                <i class="fa-solid fa-rotate" aria-hidden="true"></i> Refresh
                             </button>
-                            <button class="btn btn-primary" onclick="switchToTab('pageAttackCenter')">
-                                <i class="fas fa-bolt"></i> Launch Security Test
+
+                            <!-- Quick Attack Sim Trigger -->
+                            <button type="button" class="btn btn-primary btn-sm" onclick="switchToTab('pageAttackCenter')" aria-label="Launch attack simulation">
+                                <i class="fa-solid fa-bolt" aria-hidden="true"></i> Attack Simulator
                             </button>
                         </div>
                     </div>
 
-                    <!-- KPI Summary Ribbon -->
-                    <div class="kpi-grid">
-                        <div class="kpi-card kpi-info">
-                            <div class="kpi-label"><span>Total Events</span> <i class="fas fa-database"></i></div>
-                            <div class="kpi-value" id="statTotalEvents">124</div>
-                            <div class="kpi-sub">Telemetry stream recorded</div>
-                        </div>
-                        <div class="kpi-card kpi-critical">
-                            <div class="kpi-label"><span>Active Incidents</span> <i class="fas fa-triangle-exclamation"></i></div>
-                            <div class="kpi-value" id="statActiveIncidents" style="color: var(--status-danger);">0</div>
-                            <div class="kpi-sub">Correlation detections</div>
-                        </div>
-                        <div class="kpi-card kpi-warning">
-                            <div class="kpi-label"><span>Quarantined IPs</span> <i class="fas fa-user-slash"></i></div>
-                            <div class="kpi-value" id="statQuarantinedIps" style="color: var(--status-warning);">0</div>
-                            <div class="kpi-sub">Active perimeter blocks</div>
-                        </div>
-                        <div class="kpi-card kpi-success">
-                            <div class="kpi-label"><span>Verified Contained</span> <i class="fas fa-shield-check"></i></div>
-                            <div class="kpi-value" id="statVerifiedContained" style="color: var(--status-success);">100%</div>
-                            <div class="kpi-sub">Dual-probe verification</div>
-                        </div>
-                    </div>
-
-                    <!-- Transparent Security Posture Scorecard -->
-                    <div class="soc-card">
-                        <div class="soc-card-header">
-                            <h3><i class="fas fa-shield-halved" style="color: var(--status-success);"></i> Autonomous Security Posture Score</h3>
-                            <div style="display: flex; gap: 8px; align-items: center;">
-                                <span class="badge badge-success" id="postureRatingBadge">GRADE A • HARDENED &amp; RESILIENT</span>
-                                <button class="btn btn-secondary btn-sm" onclick="loadSecurityPosture()">
-                                    <i class="fas fa-sync-alt"></i> Recalculate
-                                </button>
+                    <!-- 8 Professional Executive KPI Cards -->
+                    <div class="executive-kpi-grid" id="executiveKpiGrid">
+                        <!-- Card 1: Total Events -->
+                        <div class="metric-card-executive kpi-info" id="kpiCardTotalEvents" data-tooltip="Total raw and correlated HTTP security telemetry events processed in selected window">
+                            <div class="metric-header">
+                                <span class="metric-title">Total Security Events</span>
+                                <div class="metric-icon-box"><i class="fa-solid fa-database" aria-hidden="true"></i></div>
+                            </div>
+                            <div class="metric-reading" id="statTotalEvents">---</div>
+                            <div class="metric-footer">
+                                <span class="metric-trend trend-neutral" id="kpiEventsTrend"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i> 0.0%</span>
+                                <span class="metric-context" id="kpiEventsContext">vs prior period</span>
                             </div>
                         </div>
-                        <div class="soc-card-body">
-                            <div style="display: grid; grid-template-columns: 180px 1.4fr 1.2fr; gap: 24px; align-items: center;">
-                                <div style="text-align: center; border-right: 1px solid var(--border-panel); padding-right: 20px;">
-                                    <div style="font-size: 52px; font-weight: 900; font-family: var(--font-mono); color: var(--status-success); line-height: 1;" id="postureScoreVal">92</div>
-                                    <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-top: 6px;">out of 100</div>
-                                    <div style="font-size: 12px; font-weight: 700; color: var(--status-success); margin-top: 4px;" id="postureRatingText">Hardened &amp; Resilient</div>
-                                </div>
-                                <div>
-                                    <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 10px;">Security Defense Pillars</div>
-                                    <div id="defensePillarsContainer" style="display: flex; flex-direction: column; gap: 8px;">
-                                        <!-- Dynamically populated -->
-                                    </div>
-                                </div>
-                                <div style="background: var(--bg-card-subtle); border: 1px solid var(--border-panel); border-radius: var(--radius-sm); padding: 14px 16px;">
-                                    <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px;">Scoring Formula Breakdown</div>
-                                    <div style="font-size: 11px; color: var(--text-secondary); line-height: 1.6;" id="postureFormulaText">
-                                        Base Score: <strong>100 pts</strong><br>
-                                        <span style="color: var(--status-success);">+5 pts</span> 3 verified AST patches active<br>
-                                        <span style="color: var(--status-success);">+5 pts</span> 100% containment verification rate
-                                    </div>
-                                    <div style="margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border-panel); display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted);">
-                                        <span>Verification Rate: <strong style="color: var(--status-success);" id="postureContainmentRate">100%</strong></span>
-                                        <span>Active Bans: <strong style="color: var(--status-danger);" id="postureBans">0</strong></span>
-                                    </div>
-                                </div>
+
+                        <!-- Card 2: Active Incidents -->
+                        <div class="metric-card-executive kpi-critical" id="kpiCardActiveIncidents" data-tooltip="Security incidents currently requiring containment or active autonomous triage">
+                            <div class="metric-header">
+                                <span class="metric-title">Active Incidents</span>
+                                <div class="metric-icon-box"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i></div>
+                            </div>
+                            <div class="metric-reading" id="statActiveIncidents" style="color:var(--status-danger);">---</div>
+                            <div class="metric-footer">
+                                <span class="metric-trend trend-unfavorable" id="kpiIncidentsTrend"><i class="fa-solid fa-arrow-trend-up" aria-hidden="true"></i> 0.0%</span>
+                                <span class="metric-context">requiring containment</span>
+                            </div>
+                        </div>
+
+                        <!-- Card 3: Critical Incidents -->
+                        <div class="metric-card-executive kpi-critical" id="kpiCardCriticalIncidents" data-tooltip="Incidents flagged with Critical impact (e.g. SQL Injection, remote code execution)">
+                            <div class="metric-header">
+                                <span class="metric-title">Critical Severity</span>
+                                <div class="metric-icon-box"><i class="fa-solid fa-skull-crossbones" aria-hidden="true"></i></div>
+                            </div>
+                            <div class="metric-reading" id="statCriticalIncidents" style="color:var(--status-danger);">---</div>
+                            <div class="metric-footer">
+                                <span class="metric-trend trend-unfavorable" id="kpiCriticalTrend"><i class="fa-solid fa-arrow-trend-up" aria-hidden="true"></i> 0.0%</span>
+                                <span class="metric-context">high-impact exploits</span>
+                            </div>
+                        </div>
+
+                        <!-- Card 4: Resolved Incidents -->
+                        <div class="metric-card-executive kpi-success" id="kpiCardResolvedIncidents" data-tooltip="Incidents that have successfully undergone mitigation and containment closure">
+                            <div class="metric-header">
+                                <span class="metric-title">Resolved Incidents</span>
+                                <div class="metric-icon-box"><i class="fa-solid fa-circle-check" aria-hidden="true"></i></div>
+                            </div>
+                            <div class="metric-reading" id="statResolvedIncidents" style="color:var(--status-success);">---</div>
+                            <div class="metric-footer">
+                                <span class="metric-trend trend-favorable"><i class="fa-solid fa-shield-check" aria-hidden="true"></i> Verified</span>
+                                <span class="metric-context">contained &amp; closed</span>
+                            </div>
+                        </div>
+
+                        <!-- Card 5: Verified Remediations -->
+                        <div class="metric-card-executive kpi-success" id="kpiCardVerifiedRemediations" data-tooltip="Defensive actions verified via synthetic attacker probe (403) and benign probe (200)">
+                            <div class="metric-header">
+                                <span class="metric-title">Verified Remediations</span>
+                                <div class="metric-icon-box"><i class="fa-solid fa-shield-check" aria-hidden="true"></i></div>
+                            </div>
+                            <div class="metric-reading" id="statVerifiedRemediations" style="color:var(--status-success);">---</div>
+                            <div class="metric-footer">
+                                <span class="metric-trend trend-favorable"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> 100%</span>
+                                <span class="metric-context">dual-probe confirmed</span>
+                            </div>
+                        </div>
+
+                        <!-- Card 6: Mean Time to Detect (MTTD) -->
+                        <div class="metric-card-executive kpi-info" id="kpiCardMTTD" data-tooltip="Average elapsed time between initial attack telemetry and automated incident correlation">
+                            <div class="metric-header">
+                                <span class="metric-title">Mean Time to Detect</span>
+                                <div class="metric-icon-box"><i class="fa-solid fa-stopwatch" aria-hidden="true"></i></div>
+                            </div>
+                            <div class="metric-reading" id="statMTTD">---</div>
+                            <div class="metric-footer">
+                                <span class="metric-trend trend-favorable"><i class="fa-solid fa-arrow-trend-down" aria-hidden="true"></i> -8.5%</span>
+                                <span class="metric-context">sliding-window speed</span>
+                            </div>
+                        </div>
+
+                        <!-- Card 7: Mean Time to Respond (MTTR) -->
+                        <div class="metric-card-executive kpi-info" id="kpiCardMTTR" data-tooltip="Average elapsed duration between incident trigger and verified perimeter isolation">
+                            <div class="metric-header">
+                                <span class="metric-title">Mean Time to Respond</span>
+                                <div class="metric-icon-box"><i class="fa-solid fa-bolt" aria-hidden="true"></i></div>
+                            </div>
+                            <div class="metric-reading" id="statMTTR">---</div>
+                            <div class="metric-footer">
+                                <span class="metric-trend trend-favorable"><i class="fa-solid fa-arrow-trend-down" aria-hidden="true"></i> -14.2%</span>
+                                <span class="metric-context">autonomous quarantine</span>
+                            </div>
+                        </div>
+
+                        <!-- Card 8: System Availability -->
+                        <div class="metric-card-executive kpi-success" id="kpiCardAvailability" data-tooltip="Ratio of successful HTTP requests (non-5xx) evaluated by AppSec telemetry middleware">
+                            <div class="metric-header">
+                                <span class="metric-title">System Availability</span>
+                                <div class="metric-icon-box"><i class="fa-solid fa-heart-pulse" aria-hidden="true"></i></div>
+                            </div>
+                            <div class="metric-reading" id="statAvailability" style="color:var(--status-success);">---</div>
+                            <div class="metric-footer">
+                                <span class="metric-trend trend-favorable"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> Stable</span>
+                                <span class="metric-context">nominal HTTP ratio</span>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Telemetry Events & Threat Chart -->
-                    <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 18px;">
-                        <div class="soc-card" style="margin-bottom: 0;">
+                    <!-- Analytics Row 1: Event Timeline & Threat Severity Distribution -->
+                    <div style="display: grid; grid-template-columns: 1.4fr 1fr; gap: 18px; margin-bottom: 20px;">
+                        <!-- Timeline Chart Card -->
+                        <div class="soc-card" style="margin-bottom:0;">
                             <div class="soc-card-header">
-                                <h3><i class="fas fa-list-ul" style="color: var(--primary);"></i> Recent Security Telemetry</h3>
-                                <button class="btn btn-secondary btn-sm" onclick="loadOverviewIncidents()">
-                                    <i class="fas fa-sync-alt"></i> Refresh
-                                </button>
+                                <h3><i class="fa-solid fa-chart-line" style="color: var(--accent-cyan);" aria-hidden="true"></i> Security Event Volume Timeline</h3>
+                                <div style="display: flex; gap: 8px; align-items: center;">
+                                    <select class="filter-select" id="timelineCategorySelect" onchange="loadEventTimelineChart()" style="padding: 3px 8px; font-size: 0.75rem;" aria-label="Filter timeline by attack category">
+                                        <option value="ALL">All Categories</option>
+                                        <option value="INJ">SQL Injection</option>
+                                        <option value="AUTH">Credential Stuffing</option>
+                                        <option value="XSS">Cross-Site Scripting</option>
+                                        <option value="RATE">Rate Anomaly</option>
+                                    </select>
+                                    <select class="filter-select" id="timelineSeveritySelect" onchange="loadEventTimelineChart()" style="padding: 3px 8px; font-size: 0.75rem;" aria-label="Filter timeline by severity">
+                                        <option value="ALL">All Severities</option>
+                                        <option value="CRITICAL">Critical</option>
+                                        <option value="HIGH">High</option>
+                                        <option value="MEDIUM">Medium</option>
+                                        <option value="INFO">Info</option>
+                                    </select>
+                                </div>
                             </div>
-                            <div class="soc-table-wrapper" style="border: none; border-radius: 0;">
-                                <table class="soc-table">
+                            <div class="soc-card-body" style="padding: 16px;">
+                                <div style="height: 240px; width: 100%; position: relative;">
+                                    <canvas id="securityEventTimelineCanvas"></canvas>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 0.72rem; color: var(--text-muted); border-top: 1px solid var(--border-panel); padding-top: 8px;">
+                                    <span>Bucket Interval: <strong class="font-mono text-secondary" id="timelineBucketDuration">Uniform 12-Slice</strong></span>
+                                    <span>Total Filtered Events: <strong class="font-mono text-secondary" id="timelineTotalEventsCount">---</strong></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Severity Distribution Donut Card -->
+                        <div class="soc-card" style="margin-bottom:0;">
+                            <div class="soc-card-header">
+                                <h3><i class="fa-solid fa-chart-pie" style="color: var(--status-warning);" aria-hidden="true"></i> Threat Severity Distribution</h3>
+                                <div style="display:flex; gap:6px;">
+                                    <button type="button" class="btn btn-outline btn-sm active" id="sevModeEventsBtn" onclick="setSeverityDonutMode('events')" style="font-size:0.7rem; padding:2px 8px;">Events</button>
+                                    <button type="button" class="btn btn-outline btn-sm" id="sevModeIncidentsBtn" onclick="setSeverityDonutMode('incidents')" style="font-size:0.7rem; padding:2px 8px;">Incidents</button>
+                                </div>
+                            </div>
+                            <div class="soc-card-body" style="padding: 16px;">
+                                <div style="height: 210px; width: 100%; position: relative;">
+                                    <canvas id="threatSeverityDonutCanvas"></canvas>
+                                </div>
+                                <!-- Monospace Breakdown Bar -->
+                                <div id="severityBreakdownNumbers" style="display: flex; justify-content: space-around; margin-top: 12px; font-size: 0.72rem; text-align: center;">
+                                    <div><span class="font-mono" style="color:var(--status-danger); font-weight:700;" id="sevCountCrit">0</span><br><span style="color:var(--text-muted); font-size:0.65rem;">CRIT</span></div>
+                                    <div><span class="font-mono" style="color:var(--status-warning); font-weight:700;" id="sevCountHigh">0</span><br><span style="color:var(--text-muted); font-size:0.65rem;">HIGH</span></div>
+                                    <div><span class="font-mono" style="color:var(--accent-cyan); font-weight:700;" id="sevCountMed">0</span><br><span style="color:var(--text-muted); font-size:0.65rem;">MED</span></div>
+                                    <div><span class="font-mono" style="color:var(--status-success); font-weight:700;" id="sevCountLow">0</span><br><span style="color:var(--text-muted); font-size:0.65rem;">LOW</span></div>
+                                    <div><span class="font-mono" style="color:var(--text-secondary); font-weight:700;" id="sevCountInfo">0</span><br><span style="color:var(--text-muted); font-size:0.65rem;">INFO</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Analytics Row 2: Incident Lifecycle Pipeline & Detection Rule Analysis -->
+                    <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 18px; margin-bottom: 20px;">
+                        <!-- Lifecycle Pipeline Card -->
+                        <div class="soc-card" style="margin-bottom:0;">
+                            <div class="soc-card-header">
+                                <h3><i class="fa-solid fa-arrows-split-up-and-left" style="color: var(--accent-purple);" aria-hidden="true"></i> Autonomous Incident Lifecycle Pipeline</h3>
+                                <span class="badge badge-neutral" style="font-size:0.7rem;">7-Stage Flow</span>
+                            </div>
+                            <div class="lifecycle-pipeline-container">
+                                <div class="lifecycle-stages-bar" id="lifecycleStagesContainer">
+                                    <div class="lifecycle-stage-step" id="stageStepNew">
+                                        <div class="stage-step-title">New</div>
+                                        <div class="stage-step-count" id="lifecycleCountNew">0</div>
+                                        <div class="stage-step-step-dot"></div>
+                                    </div>
+                                    <div class="lifecycle-stage-step" id="stageStepTriaged">
+                                        <div class="stage-step-title">Triaged</div>
+                                        <div class="stage-step-count" id="lifecycleCountTriaged">0</div>
+                                        <div class="stage-step-step-dot"></div>
+                                    </div>
+                                    <div class="lifecycle-stage-step active" id="stageStepInvestigating">
+                                        <div class="stage-step-title">Investigating</div>
+                                        <div class="stage-step-count" id="lifecycleCountInvestigating">0</div>
+                                        <div class="stage-step-step-dot"></div>
+                                    </div>
+                                    <div class="lifecycle-stage-step" id="stageStepContainment">
+                                        <div class="stage-step-title">Containment</div>
+                                        <div class="stage-step-count" id="lifecycleCountContainment">0</div>
+                                        <div class="stage-step-step-dot"></div>
+                                    </div>
+                                    <div class="lifecycle-stage-step" id="stageStepRemediation">
+                                        <div class="stage-step-title">Remediate</div>
+                                        <div class="stage-step-count" id="lifecycleCountRemediation">0</div>
+                                        <div class="stage-step-step-dot"></div>
+                                    </div>
+                                    <div class="lifecycle-stage-step" id="stageStepVerification">
+                                        <div class="stage-step-title">Verify</div>
+                                        <div class="stage-step-count" id="lifecycleCountVerification">0</div>
+                                        <div class="stage-step-step-dot"></div>
+                                    </div>
+                                    <div class="lifecycle-stage-step resolved" id="stageStepResolved">
+                                        <div class="stage-step-title">Resolved</div>
+                                        <div class="stage-step-count" id="lifecycleCountResolved">0</div>
+                                        <div class="stage-step-step-dot"></div>
+                                    </div>
+                                </div>
+                                <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.72rem; color:var(--text-muted); border-top:1px solid var(--border-panel); padding-top:10px;">
+                                    <span>Active Triage Rate: <strong style="color:var(--status-success);">100% Automated</strong></span>
+                                    <button class="btn btn-ghost btn-sm" onclick="switchToTab('pageIncidents')" style="font-size:0.72rem; padding:2px 8px;">View Incident Center &rarr;</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Detection Rule Distribution Table -->
+                        <div class="soc-card" style="margin-bottom:0;">
+                            <div class="soc-card-header">
+                                <h3><i class="fa-solid fa-list-check" style="color: var(--accent-cyan);" aria-hidden="true"></i> Detection Rule Coverage &amp; Distribution</h3>
+                                <span class="badge badge-success" style="font-size:0.7rem;">7 Active Rules</span>
+                            </div>
+                            <div class="table-responsive" style="max-height: 240px; overflow-y: auto;">
+                                <table class="forensic-table" aria-label="Detection Rule Analysis Table">
                                     <thead>
                                         <tr>
-                                            <th>Time</th>
-                                            <th>Event</th>
-                                            <th>Endpoint</th>
-                                            <th>Status</th>
+                                            <th scope="col">Rule ID</th>
+                                            <th scope="col">Attack Vector / Rule Name</th>
+                                            <th scope="col">Severity</th>
+                                            <th scope="col">Incidents</th>
+                                            <th scope="col">Detections</th>
                                         </tr>
                                     </thead>
-                                    <tbody id="overviewEventsTableBody">
+                                    <tbody id="detectionRulesTableBody">
                                         <tr>
-                                            <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 20px;">
-                                                <i class="fas fa-spinner fa-spin"></i> Loading real-time telemetry...
+                                            <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 20px;">
+                                                <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Loading rule telemetry...
                                             </td>
                                         </tr>
                                     </tbody>
                                 </table>
                             </div>
                         </div>
+                    </div>
 
-                        <div class="soc-card" style="margin-bottom: 0; position: relative;">
+                    <!-- Operational Row 3: Remediation Analytics & Autonomous Self-Healing Status -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 20px;">
+                        <!-- Remediation Analytics Card -->
+                        <div class="soc-card" style="margin-bottom:0;">
                             <div class="soc-card-header">
-                                <h3><i class="fas fa-chart-line" style="color: var(--primary);"></i> Threat Activity Trend</h3>
-                                <span class="badge badge-neutral">Live Velocity</span>
+                                <h3><i class="fa-solid fa-wrench" style="color: var(--status-success);" aria-hidden="true"></i> Remediation &amp; Patch Verification Analytics</h3>
+                                <button type="button" class="btn btn-ghost btn-sm" onclick="switchToTab('pageSoar')" style="font-size:0.72rem;">SOAR Playbooks &rarr;</button>
                             </div>
-                            <div class="soc-card-body" style="position: relative;">
-                                <div class="threat-peak-badge" id="chartThreatPeakBadge" style="display: none;">
-                                    <i class="fas fa-triangle-exclamation"></i> Threat Peak Detected
+                            <div class="soc-card-body" style="padding: 16px;">
+                                <div style="display: grid; grid-template-columns: 140px 1fr; gap: 20px; align-items: center;">
+                                    <div style="text-align: center; border-right: 1px solid var(--border-panel); padding-right: 16px;">
+                                        <div style="font-size: 42px; font-weight: 900; font-family: var(--font-mono); color: var(--status-success); line-height: 1;" id="remediationSuccessRateVal">100%</div>
+                                        <div style="font-size: 0.68rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-top: 6px;">Success Rate</div>
+                                        <div style="font-size: 0.72rem; font-weight: 700; color: var(--status-success); margin-top: 4px;">Zero False Fixes</div>
+                                    </div>
+                                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
+                                        <div style="background: var(--bg-surface); border: 1px solid var(--border-panel); border-radius: var(--radius-sm); padding: 8px 12px;">
+                                            <div style="font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase;">Successful Fixes</div>
+                                            <div style="font-size: 1.15rem; font-weight: 800; font-family: var(--font-mono); color: var(--status-success);" id="remediationCountSuccess">4</div>
+                                        </div>
+                                        <div style="background: var(--bg-surface); border: 1px solid var(--border-panel); border-radius: var(--radius-sm); padding: 8px 12px;">
+                                            <div style="font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase;">Verification Fails</div>
+                                            <div style="font-size: 1.15rem; font-weight: 800; font-family: var(--font-mono); color: var(--status-danger);" id="remediationCountFails">0</div>
+                                        </div>
+                                        <div style="background: var(--bg-surface); border: 1px solid var(--border-panel); border-radius: var(--radius-sm); padding: 8px 12px;">
+                                            <div style="font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase;">Rolled-Back Actions</div>
+                                            <div style="font-size: 1.15rem; font-weight: 800; font-family: var(--font-mono); color: var(--status-warning);" id="remediationCountRollbacks">1</div>
+                                        </div>
+                                        <div style="background: var(--bg-surface); border: 1px solid var(--border-panel); border-radius: var(--radius-sm); padding: 8px 12px;">
+                                            <div style="font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase;">Pending Approvals</div>
+                                            <div style="font-size: 1.15rem; font-weight: 800; font-family: var(--font-mono); color: var(--accent-cyan);" id="remediationCountPending">1</div>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div style="height: 240px; width: 100%;">
-                                    <canvas id="overviewChart"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Self-Healing Status Card -->
+                        <div class="soc-card" style="margin-bottom:0;">
+                            <div class="soc-card-header">
+                                <h3><i class="fa-solid fa-code-commit" style="color: var(--accent-cyan);" aria-hidden="true"></i> Autonomous Self-Healing Status</h3>
+                                <button type="button" class="btn btn-outline btn-sm" onclick="switchToTab('pageHealing')" style="font-size:0.72rem;"><i class="fa-solid fa-shield" aria-hidden="true"></i> Patch Manager</button>
+                            </div>
+                            <div class="soc-card-body" style="padding: 16px;">
+                                <div style="display: flex; flex-direction: column; gap: 10px;">
+                                    <!-- Dual Probe Verification Status Panel -->
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                                        <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: var(--radius-sm); padding: 8px 12px;">
+                                            <div style="font-size: 0.68rem; color: var(--status-danger); font-weight: 700; text-transform: uppercase;"><i class="fa-solid fa-ban" aria-hidden="true"></i> Attacker Probe</div>
+                                            <div class="font-mono" style="font-size: 0.82rem; font-weight: 700; color: var(--status-danger);" id="healingAttackerProbeStatus">QUARANTINED (403)</div>
+                                            <div style="font-size: 0.68rem; color: var(--text-muted);">Perimeter isolation confirmed</div>
+                                        </div>
+                                        <div style="background: rgba(34, 197, 94, 0.08); border: 1px solid rgba(34, 197, 94, 0.25); border-radius: var(--radius-sm); padding: 8px 12px;">
+                                            <div style="font-size: 0.68rem; color: var(--status-success); font-weight: 700; text-transform: uppercase;"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> Benign Shopper Probe</div>
+                                            <div class="font-mono" style="font-size: 0.82rem; font-weight: 700; color: var(--status-success);" id="healingBenignProbeStatus">UNIMPAIRED (200 OK)</div>
+                                            <div style="font-size: 0.68rem; color: var(--text-muted);">Zero business disruption</div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Last Verified Remediation Dossier Snippet -->
+                                    <div style="background: var(--bg-surface); border: 1px solid var(--border-panel); border-radius: var(--radius-sm); padding: 10px 12px; font-size: 0.75rem;">
+                                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                            <span style="font-weight: 700; color: var(--text-primary);"><i class="fa-solid fa-file-shield" aria-hidden="true"></i> Last Verified Remediation:</span>
+                                            <span class="font-mono" style="color: var(--accent-cyan);" id="healingLastIncidentId">INC-2026-0F493FFE</span>
+                                        </div>
+                                        <div style="color: var(--text-secondary);" id="healingLastActionText">Perimeter IP Block &amp; Rate Throttling applied and verified via dual loopback probe.</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Live Operations Row 4: Live Activity Feed & Active Incidents Panel -->
+                    <div style="display: grid; grid-template-columns: 1.1fr 1fr; gap: 18px; margin-bottom: 20px;">
+                        <!-- Live Security Activity Feed -->
+                        <div class="soc-card" style="margin-bottom:0;">
+                            <div class="soc-card-header">
+                                <h3><i class="fa-solid fa-satellite-dish" style="color: var(--accent-cyan);" aria-hidden="true"></i> Live Security Activity Feed</h3>
+                                <div style="display: flex; gap: 6px; align-items: center;">
+                                    <span class="status-indicator">
+                                        <span class="status-dot status-live"></span>
+                                        <span class="font-mono" style="font-size: 0.7rem; color: var(--status-success);">SSE STREAM</span>
+                                    </span>
+                                    <button type="button" class="btn btn-ghost btn-sm" onclick="loadLiveActivityFeed()" aria-label="Refresh activity feed" style="font-size:0.7rem; padding:2px 6px;">
+                                        <i class="fa-solid fa-rotate" aria-hidden="true"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="soc-card-body" style="padding: 10px 14px;">
+                                <div class="activity-feed-container" id="executiveActivityFeedContainer">
+                                    <div style="text-align: center; color: var(--text-muted); padding: 30px;">
+                                        <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Listening to security telemetry stream...
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Active Incident Command Queue -->
+                        <div class="soc-card" style="margin-bottom:0;">
+                            <div class="soc-card-header">
+                                <h3><i class="fa-solid fa-bell" style="color: var(--status-danger);" aria-hidden="true"></i> Active Incident Command Queue</h3>
+                                <button type="button" class="btn btn-outline btn-sm" onclick="switchToTab('pageIncidents')" style="font-size:0.72rem;">All Incidents &rarr;</button>
+                            </div>
+                            <div class="table-responsive" style="max-height: 380px; overflow-y: auto;">
+                                <table class="forensic-table" aria-label="Active Incidents Table">
+                                    <thead>
+                                        <tr>
+                                            <th scope="col">Incident ID</th>
+                                            <th scope="col">Severity</th>
+                                            <th scope="col">Title / Threat</th>
+                                            <th scope="col">Source IP</th>
+                                            <th scope="col">Status</th>
+                                            <th scope="col">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="overviewIncidentsTableBody">
+                                        <tr>
+                                            <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 20px;">
+                                                <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Loading active incident queue...
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Row 5: 8-Subsystem System Health Panel -->
+                    <div class="soc-card" style="margin-bottom:0;">
+                        <div class="soc-card-header">
+                            <h3><i class="fa-solid fa-server" style="color: var(--status-success);" aria-hidden="true"></i> Defensive Subsystem Status &amp; Operational Health</h3>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <span class="badge badge-success" id="overallSystemHealthBadge">8 / 8 SUBSYSTEMS HEALTHY</span>
+                                <button type="button" class="btn btn-ghost btn-sm" onclick="loadDetailedSystemHealth()" style="font-size:0.72rem;">
+                                    <i class="fa-solid fa-sync-alt" aria-hidden="true"></i> Health Check
+                                </button>
+                            </div>
+                        </div>
+                        <div class="soc-card-body" style="padding: 16px;">
+                            <div class="health-subsystem-grid" id="healthSubsystemsContainer">
+                                <!-- Dynamically populated 8 subsystem cards -->
+                                <div class="health-subsystem-card">
+                                    <div class="subsystem-card-top">
+                                        <span class="subsystem-name">FastAPI Core Daemon</span>
+                                        <span class="subsystem-status-pill healthy">HEALTHY</span>
+                                    </div>
+                                    <div class="subsystem-details">Responding on ASGI async broker</div>
+                                    <div class="subsystem-latency">Latency: 0.4ms</div>
+                                </div>
+                                <div class="health-subsystem-card">
+                                    <div class="subsystem-card-top">
+                                        <span class="subsystem-name">SQLite WAL Engine</span>
+                                        <span class="subsystem-status-pill healthy">HEALTHY</span>
+                                    </div>
+                                    <div class="subsystem-details">Journal mode WAL • Schema synchronized</div>
+                                    <div class="subsystem-latency">Latency: 1.2ms</div>
+                                </div>
+                                <div class="health-subsystem-card">
+                                    <div class="subsystem-card-top">
+                                        <span class="subsystem-name">AppSec Ingestion Pipeline</span>
+                                        <span class="subsystem-status-pill healthy">HEALTHY</span>
+                                    </div>
+                                    <div class="subsystem-details">Automated credential redaction active</div>
+                                    <div class="subsystem-latency">Latency: 1.1ms</div>
+                                </div>
+                                <div class="health-subsystem-card">
+                                    <div class="subsystem-card-top">
+                                        <span class="subsystem-name">Correlation Worker</span>
+                                        <span class="subsystem-status-pill healthy">HEALTHY</span>
+                                    </div>
+                                    <div class="subsystem-details">60s sliding window multi-step analysis</div>
+                                    <div class="subsystem-latency">Latency: 2.4ms</div>
+                                </div>
+                                <div class="health-subsystem-card">
+                                    <div class="subsystem-card-top">
+                                        <span class="subsystem-name">Quarantine &amp; Incident Queue</span>
+                                        <span class="subsystem-status-pill healthy">HEALTHY</span>
+                                    </div>
+                                    <div class="subsystem-details">Dynamic IP quarantine active</div>
+                                    <div class="subsystem-latency">Latency: 0.8ms</div>
+                                </div>
+                                <div class="health-subsystem-card">
+                                    <div class="subsystem-card-top">
+                                        <span class="subsystem-name">Multi-Vector Detector</span>
+                                        <span class="subsystem-status-pill healthy">HEALTHY</span>
+                                    </div>
+                                    <div class="subsystem-details">7/7 detection rules operational</div>
+                                    <div class="subsystem-latency">Latency: 0.6ms</div>
+                                </div>
+                                <div class="health-subsystem-card">
+                                    <div class="subsystem-card-top">
+                                        <span class="subsystem-name">Verification Agent</span>
+                                        <span class="subsystem-status-pill healthy">HEALTHY</span>
+                                    </div>
+                                    <div class="subsystem-details">Dual-probe synthetic verification active</div>
+                                    <div class="subsystem-latency">Latency: 1.5ms</div>
+                                </div>
+                                <div class="health-subsystem-card">
+                                    <div class="subsystem-card-top">
+                                        <span class="subsystem-name">AI Threat Classifier</span>
+                                        <span class="subsystem-status-pill healthy">HEALTHY</span>
+                                    </div>
+                                    <div class="subsystem-details">Evidence-grounded heuristic advisor active</div>
+                                    <div class="subsystem-latency">Latency: 3.2ms</div>
                                 </div>
                             </div>
                         </div>

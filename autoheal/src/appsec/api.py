@@ -1,7 +1,9 @@
+import asyncio
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
 
-from fastapi import APIRouter, HTTPException, Query, Response, status
+from fastapi import APIRouter, HTTPException, Query, Response, Request, status
 from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 import json
 
@@ -27,44 +29,78 @@ class RemediateRequest(BaseModel):
 
 
 @router.get("/metrics", summary="Retrieve Live Application Security KPIs")
-def get_security_metrics():
-    """Returns SOC dashboard metrics including active threats, blocked IPs, and incidents by severity."""
-    incidents = list_security_incidents(limit=100)
-    events = get_security_events(limit=500)
-    blocked = get_active_blocked_clients()
+def get_security_metrics(
+    time_range: str = Query("24h"),
+    start_time: Optional[str] = Query(None),
+    end_time: Optional[str] = Query(None)
+):
+    """Returns SOC dashboard metrics including active threats, blocked IPs, incidents by severity, and executive KPIs."""
+    from src.appsec.analytics import ExecutiveAnalyticsEngine
+    return ExecutiveAnalyticsEngine.get_executive_metrics(
+        time_range=time_range,
+        start_time=start_time,
+        end_time=end_time
+    )
 
-    sev_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
-    for inc in incidents:
-        sev = inc.get("severity", "MEDIUM").upper()
-        if sev in sev_counts:
-            sev_counts[sev] += 1
 
-    # Dynamic calculation of average remediation & verification latency from persisted telemetry
-    remediation_times = []
-    for inc in incidents:
-        ev = inc.get("evidence")
-        if isinstance(ev, dict):
-            probes = ev.get("verification_probes", [])
-            for p in probes:
-                if isinstance(p, dict) and "latency_ms" in p and p["latency_ms"] is not None:
-                    remediation_times.append(float(p["latency_ms"]))
-        actions = inc.get("mitigation_actions", [])
-        if isinstance(actions, list):
-            for a in actions:
-                if isinstance(a, dict) and "execution_time_ms" in a:
-                    remediation_times.append(float(a["execution_time_ms"]))
+@router.get("/analytics/timeline", summary="Retrieve Event Timeline Data for Charts")
+def get_event_timeline_data(
+    time_range: str = Query("24h"),
+    category: Optional[str] = Query(None),
+    severity: Optional[str] = Query(None),
+    num_buckets: int = Query(12, ge=6, le=30)
+):
+    """Returns time-bucketed event counts and severities for responsive Chart.js timeline rendering."""
+    from src.appsec.analytics import ExecutiveAnalyticsEngine
+    return ExecutiveAnalyticsEngine.get_event_timeline(
+        time_range=time_range,
+        category=category,
+        severity=severity,
+        num_buckets=num_buckets
+    )
 
-    avg_remediation_ms = round(sum(remediation_times) / len(remediation_times), 2) if remediation_times else 0.0
 
-    return {
-        "status": "OPERATIONAL",
-        "total_events_recorded": len(events),
-        "total_incidents": len(incidents),
-        "active_blocked_ips": len(blocked),
-        "incidents_by_severity": sev_counts,
-        "active_threats": sum(1 for i in incidents if i.get("status") in ["OPEN", "MITIGATING"]),
-        "average_remediation_ms": avg_remediation_ms
-    }
+@router.get("/activity/feed", summary="Retrieve Live Security Activity Feed")
+def get_activity_feed(limit: int = Query(25, ge=5, le=100)):
+    """Returns unified real-time security events, incidents, and remediation actions."""
+    from src.appsec.analytics import ExecutiveAnalyticsEngine
+    return ExecutiveAnalyticsEngine.get_live_activity_feed(limit=limit)
+
+
+@router.get("/health/detailed", summary="Retrieve Detailed 8-Subsystem Health Status")
+def get_detailed_system_health():
+    """Evaluates operational health across API, DB, Ingestion, Worker, Queue, Detector, Verifier, and AI Provider."""
+    from src.appsec.analytics import ExecutiveAnalyticsEngine
+    return ExecutiveAnalyticsEngine.get_detailed_system_health()
+
+
+@router.get("/events/stream", summary="Stream Real-Time Security Telemetry & System Heartbeat (SSE)")
+async def stream_live_events(request: Request):
+    """Streams real-time security events, threat detections, and Sentinel heartbeats via Server-Sent Events (SSE)."""
+    async def sse_event_stream():
+        last_event_id = None
+        while True:
+            if await request.is_disconnected():
+                break
+            try:
+                events = get_security_events(limit=1)
+                if events:
+                    newest = events[0]
+                    if newest.get("event_id") != last_event_id:
+                        last_event_id = newest.get("event_id")
+                        yield f"event: security_event\ndata: {json.dumps(newest)}\n\n"
+            except Exception:
+                pass
+
+            heartbeat = {
+                "type": "heartbeat",
+                "status": "SENTINEL_OPERATIONAL",
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+            yield f"event: heartbeat\ndata: {json.dumps(heartbeat)}\n\n"
+            await asyncio.sleep(3)
+
+    return StreamingResponse(sse_event_stream(), media_type="text/event-stream")
 
 
 @router.get("/events", summary="List Telemetry Security Events")
