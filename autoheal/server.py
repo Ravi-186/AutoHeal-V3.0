@@ -337,7 +337,7 @@ async def serve_flipkart(request: Request):
     """Serves the interactive Flipkart Big Billion Days storefront with live AutoHeal attack simulation."""
     if not templates:
         return JSONResponse({"status": "error", "message": "Templates directory not found"})
-    return templates.TemplateResponse("flipkart.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="shopsphere.html")
 
 @app.get("/api/flipkart/status", summary="Get Flipkart Microservices Security Status")
 def get_flipkart_status():

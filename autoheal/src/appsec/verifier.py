@@ -164,6 +164,8 @@ class AppSecVerifier:
 
         # Update evidence in incident
         evidence = inc.get("evidence", {}) or {}
+        if not isinstance(evidence, dict):
+            evidence = {"raw_items": evidence} if isinstance(evidence, list) else {}
         evidence["verification_probes"] = probes_executed
         evidence["verification_completed_at"] = datetime.now(timezone.utc).isoformat()
 

@@ -89,7 +89,7 @@ class RootCauseAnalyzer:
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT event_type, endpoint, status_code, timestamp FROM security_events WHERE client_ip = ? ORDER BY timestamp DESC LIMIT 20",
+                "SELECT event_type, path AS endpoint, status_code, timestamp FROM security_events WHERE client_ip = ? ORDER BY timestamp DESC LIMIT 20",
                 (source_ip,)
             )
             events = [dict(r) for r in cursor.fetchall()]
