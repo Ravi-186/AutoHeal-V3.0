@@ -39,7 +39,7 @@ logger_app = logging.getLogger("AutoHealAPI")
 # Initialize FastAPI App
 app = FastAPI(
     title="AutoHeal Autonomous Cybersecurity Platform API",
-    version="2.5.0",
+    version="3.0.0",
     description="Enterprise Autonomous Threat Detection, Mitigation & Verification API",
     docs_url="/api/docs",
     redoc_url="/api/redoc"
@@ -100,13 +100,13 @@ async def serve_shopsphere(request: Request):
     """Serves the full-stack Flipkart-style ShopSphere e-commerce application."""
     if not templates:
         return JSONResponse({"status": "error", "message": "Templates directory not found"})
-    return templates.TemplateResponse("shopsphere.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="shopsphere.html")
 
 @app.get("/", summary="Serve Primary AutoHeal SOC Dashboard")
 async def serve_dashboard(request: Request):
     if not templates:
         return JSONResponse({"status": "healthy", "service": "AutoHeal API", "docs": "/api/docs"})
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="index.html")
 
 @app.get("/api/health", response_model=HealthResponse, summary="Production Service Health Check")
 def health_check():
@@ -115,7 +115,7 @@ def health_check():
     return HealthResponse(
         status="HEALTHY",
         timestamp=datetime.now(timezone.utc).isoformat(),
-        version="2.4.0-enterprise",
+        version="3.0.0-enterprise",
         model_loaded=detect_agent.engine.model is not None,
         devices_monitored=len(network.devices),
         active_threats=active_threats,

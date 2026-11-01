@@ -53,10 +53,12 @@ function getStatusBadgeHtml(status) {
 }
 
 document.addEventListener('DOMContentLoaded', function () {
-    console.log('🚀 Initializing AutoHeal Enterprise Cybersecurity SOC UI...');
+    console.log('🚀 Initializing AutoHeal Enterprise Cybersecurity SOC v3.0 UI...');
     toastr.options = { positionClass: 'toast-top-right', timeOut: 3000 };
 
-    // 1. Initialize Navigation Tabs
+    // 1. Initialize Shell Layout & Navigation
+    initSidebar();
+    initCommandPalette();
     initNavigationTabs();
 
     // 2. Initialize Attack Center
@@ -84,15 +86,46 @@ document.addEventListener('DOMContentLoaded', function () {
 setInterval(() => {
     const now = new Date();
     const clockEl = document.getElementById('currentTime');
-    if (clockEl) clockEl.textContent = now.toLocaleTimeString();
+    if (clockEl) clockEl.textContent = now.toLocaleTimeString() + ' UTC';
 }, 1000);
 
 // =========================================================================
-// 1. NAVIGATION CONTROLLER
+// 1. APPLICATION SHELL & NAVIGATION CONTROLLER
 // =========================================================================
 
+function initSidebar() {
+    const toggleBtn = document.getElementById('sidebarToggleBtn');
+    const sidebar = document.getElementById('appSidebar');
+    const contentArea = document.getElementById('contentArea');
+
+    if (toggleBtn && sidebar) {
+        toggleBtn.addEventListener('click', function() {
+            if (window.innerWidth <= 768) {
+                sidebar.classList.toggle('mobile-open');
+            } else {
+                sidebar.classList.toggle('collapsed');
+                if (contentArea) contentArea.classList.toggle('expanded');
+            }
+        });
+    }
+}
+
+const PAGE_TITLES = {
+    'pageOverview': 'Overview Dashboard',
+    'pageEvents': 'Live Threat Center',
+    'pageAttackCenter': 'Attack Simulation Center',
+    'pageIncidents': 'Incident Command Center',
+    'pageSoar': 'SOAR Automation Center',
+    'pageHealing': 'Self-Healing Center',
+    'pageThreatIntel': 'Threat Intelligence & IOCs',
+    'pageMitre': 'MITRE ATT&CK Matrix',
+    'pageTopology': 'Asset & Topology Map',
+    'pageReports': 'Incident Reports',
+    'pageSettings': 'Administration & Audit'
+};
+
 function initNavigationTabs() {
-    const tabs = document.querySelectorAll('.nav-tab-item[data-page]');
+    const tabs = document.querySelectorAll('.nav-item-btn[data-page], .nav-tab-item[data-page]');
     tabs.forEach(tab => {
         tab.addEventListener('click', function(e) {
             e.preventDefault();
@@ -103,11 +136,11 @@ function initNavigationTabs() {
 }
 
 function switchToTab(pageId) {
-    const tabs = document.querySelectorAll('.nav-tab-item[data-page]');
+    const tabs = document.querySelectorAll('.nav-item-btn[data-page], .nav-tab-item[data-page]');
     tabs.forEach(t => t.classList.remove('active'));
     
-    const activeTab = document.querySelector(`.nav-tab-item[data-page="${pageId}"]`);
-    if (activeTab) activeTab.classList.add('active');
+    const activeTabs = document.querySelectorAll(`.nav-item-btn[data-page="${pageId}"], .nav-tab-item[data-page="${pageId}"]`);
+    activeTabs.forEach(t => t.classList.add('active'));
 
     // Switch visible section
     document.querySelectorAll('.workspace-page').forEach(page => {
@@ -117,6 +150,18 @@ function switchToTab(pageId) {
     const targetPage = document.getElementById(pageId);
     if (targetPage) {
         targetPage.classList.add('active');
+    }
+
+    // Update Breadcrumb Trail
+    const crumbEl = document.getElementById('breadcrumbActivePage');
+    if (crumbEl && PAGE_TITLES[pageId]) {
+        crumbEl.textContent = PAGE_TITLES[pageId];
+    }
+
+    // Close mobile sidebar if open
+    const sidebar = document.getElementById('appSidebar');
+    if (sidebar && sidebar.classList.contains('mobile-open')) {
+        sidebar.classList.remove('mobile-open');
     }
 
     // Refresh page-specific content on tab entry
@@ -129,12 +174,19 @@ function switchToTab(pageId) {
         loadSecurityEvents();
     } else if (pageId === 'pageIncidents') {
         loadIncidentsList();
+    } else if (pageId === 'pageSoar') {
+        loadQuarantinedClients();
+        loadSecurityPosture();
     } else if (pageId === 'pageHealing') {
         loadQuarantinedClients();
         loadVulnerabilitiesTable();
+    } else if (pageId === 'pageThreatIntel') {
+        loadQuarantinedClients();
+    } else if (pageId === 'pageTopology') {
+        initTopology3D();
     } else if (pageId === 'pageReports') {
         loadIncidentReportsTable();
-    } else if (pageId === 'pageHealth') {
+    } else if (pageId === 'pageSettings') {
         pingAllServices();
     }
 }
@@ -909,55 +961,62 @@ function openGeneratedReport() {
 // =========================================================================
 
 async function loadSecurityEvents() {
-    const tbody = document.getElementById('securityEventsTableBody');
+    const tbody = document.getElementById('eventsTableBody') || document.getElementById('securityEventsTableBody');
     if (!tbody) return;
 
-    const eventType = document.getElementById('eventsFilterType')?.value || '';
-    const severity = document.getElementById('eventsFilterSeverity')?.value || '';
+    const eventType = document.getElementById('eventsCategoryFilter')?.value || document.getElementById('eventsFilterType')?.value || '';
+    const severity = document.getElementById('eventsSeverityFilter')?.value || document.getElementById('eventsFilterSeverity')?.value || '';
 
     let url = '/api/security/events?limit=100';
-    if (eventType) url += `&event_type=${encodeURIComponent(eventType)}`;
-    if (severity) url += `&severity=${encodeURIComponent(severity)}`;
+    if (eventType && eventType !== 'ALL') url += `&event_type=${encodeURIComponent(eventType)}`;
+    if (severity && severity !== 'ALL') url += `&severity=${encodeURIComponent(severity)}`;
 
     try {
         const res = await fetch(url);
         if (!res.ok) return;
         const events = await res.json();
-        allFetchedEvents = events;
+        allFetchedEvents = Array.isArray(events) ? events : (events.events || []);
 
-        renderEventsTable(events);
+        renderEventsTable(allFetchedEvents);
     } catch (e) {
         console.error('Error loading security events', e);
     }
 }
 
 function renderEventsTable(events) {
-    const tbody = document.getElementById('securityEventsTableBody');
+    const tbody = document.getElementById('eventsTableBody') || document.getElementById('securityEventsTableBody');
     if (!tbody) return;
 
     if (!events || events.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 24px;">No security events recorded matching criteria.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 24px;">No security events recorded matching criteria.</td></tr>';
         return;
     }
 
     tbody.innerHTML = '';
     events.forEach(evt => {
         const tr = document.createElement('tr');
+        tr.style.cursor = 'pointer';
+        tr.onclick = () => openEventDetailDrawer(evt);
+
         const timeStr = formatAppSecTimestamp(evt.timestamp, false);
         const sevBadge = getSeverityBadgeHtml(evt.severity);
         const method = evt.method || evt.http_method || 'GET';
         const path = evt.path || evt.endpoint_path || '-';
         const sc = evt.status_code || 200;
+        const actionTaken = evt.action_taken || (sc === 403 ? 'Quarantined (403)' : sc === 429 ? 'Throttled (429)' : 'Logged Nominal');
 
         tr.innerHTML = `
-            <td><code style="color: var(--primary);">${evt.event_id || '-'}</code></td>
-            <td style="color: var(--text-muted);">${timeStr}</td>
+            <td style="color: var(--text-muted); font-family: var(--font-mono);">${timeStr}</td>
             <td><strong style="color: #ffffff;">${evt.event_type}</strong></td>
+            <td>${sevBadge}</td>
             <td><code>${evt.client_ip || '-'}</code></td>
             <td><span style="font-weight: 600; color: #ffffff;">${method}</span> <code style="color: var(--text-muted);">${path}</code></td>
-            <td><span class="badge ${sc >= 400 ? 'badge-critical' : 'badge-success'}">${sc}</span></td>
-            <td>${sevBadge}</td>
-            <td style="font-family: var(--font-mono); font-size: 11px; color: var(--text-dim);">${evt.correlation_id || '-'}</td>
+            <td style="color: ${sc >= 400 ? 'var(--status-danger)' : 'var(--status-success)'}; font-weight: 600;">${actionTaken}</td>
+            <td>
+                <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); openEventDetailDrawer(${JSON.stringify(evt).replace(/"/g, '&quot;')})">
+                    <i class="fas fa-search"></i>
+                </button>
+            </td>
         `;
         tbody.appendChild(tr);
     });
@@ -1783,5 +1842,422 @@ async function rollbackDrawerPatch() {
         loadSecurityPosture();
     } catch (e) {
         toastr.error('Rollback failed: ' + e.message);
+    }
+}
+
+// =========================================================================
+// 8. COMMAND PALETTE (Ctrl + K) & GLOBAL KEYBOARD CONTROLLER
+// =========================================================================
+
+function toggleCommandPalette(show) {
+    const backdrop = document.getElementById('cmdPaletteBackdrop');
+    const input = document.getElementById('cmdPaletteInput');
+    if (!backdrop) return;
+
+    if (show) {
+        backdrop.classList.add('active');
+        if (input) {
+            input.value = '';
+            input.focus();
+            filterCommandPalette('');
+        }
+    } else {
+        backdrop.classList.remove('active');
+    }
+}
+
+function filterCommandPalette(query) {
+    const q = (query || '').toLowerCase().trim();
+    const items = document.querySelectorAll('#cmdPaletteResults .cmd-result-item');
+    items.forEach(item => {
+        const text = item.textContent.toLowerCase();
+        if (!q || text.includes(q)) {
+            item.style.display = 'flex';
+        } else {
+            item.style.display = 'none';
+        }
+    });
+}
+
+function initCommandPalette() {
+    const input = document.getElementById('cmdPaletteInput');
+    if (input) {
+        input.addEventListener('input', function() {
+            filterCommandPalette(this.value);
+        });
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                toggleCommandPalette(false);
+            } else if (e.key === 'Enter') {
+                const firstVisible = Array.from(document.querySelectorAll('#cmdPaletteResults .cmd-result-item'))
+                    .find(el => el.style.display !== 'none');
+                if (firstVisible) firstVisible.click();
+            }
+        });
+    }
+
+    // Global keyboard shortcuts (Ctrl+K, Cmd+K, Escape)
+    document.addEventListener('keydown', function(e) {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+            e.preventDefault();
+            const backdrop = document.getElementById('cmdPaletteBackdrop');
+            const isActive = backdrop && backdrop.classList.contains('active');
+            toggleCommandPalette(!isActive);
+        } else if (e.key === 'Escape') {
+            toggleCommandPalette(false);
+            closeEventDetailDrawer();
+            closeVulnDrawer();
+        }
+    });
+}
+
+// =========================================================================
+// 9. SIDE-OVER EVENT DETAIL DRAWER & TELEMETRY INSPECTOR
+// =========================================================================
+
+let currentDrawerEvent = null;
+
+function openEventDetailDrawer(eventObj) {
+    currentDrawerEvent = eventObj;
+    const drawer = document.getElementById('eventDetailDrawer');
+    const backdrop = document.getElementById('eventDrawerBackdrop');
+    const body = document.getElementById('eventDetailDrawerBody');
+    if (!drawer || !body) return;
+
+    const timeStr = formatAppSecTimestamp(eventObj.timestamp, true);
+    const sevBadge = getSeverityBadgeHtml(eventObj.severity);
+    const method = eventObj.method || eventObj.http_method || 'GET';
+    const path = eventObj.path || eventObj.endpoint_path || '-';
+    const sc = eventObj.status_code || 200;
+
+    body.innerHTML = `
+        <div style="margin-bottom: 16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <span class="badge ${sc >= 400 ? 'badge-critical' : 'badge-success'}">HTTP ${sc}</span>
+                ${sevBadge}
+            </div>
+            <h4 style="font-size:15px; font-weight:800; color:var(--text-primary); margin-bottom:4px;">${eventObj.event_type || 'SECURITY_EVENT'}</h4>
+            <div style="font-size:11px; color:var(--text-muted); font-family:var(--font-mono);">Event ID: ${eventObj.event_id || '-'}</div>
+        </div>
+
+        <div style="background:var(--bg-card-subtle); border:1px solid var(--border-panel); border-radius:var(--radius-sm); padding:12px; margin-bottom:16px;">
+            <div style="font-size:10px; font-weight:700; color:var(--text-muted); text-transform:uppercase; margin-bottom:8px;">Request Metadata</div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:11px;">
+                <div>Client IP: <code style="color:var(--accent-cyan);">${eventObj.client_ip || '-'}</code></div>
+                <div>Method: <strong style="color:#ffffff;">${method}</strong></div>
+                <div style="grid-column: span 2;">Path: <code>${path}</code></div>
+                <div style="grid-column: span 2;">Timestamp: <span style="color:var(--text-secondary);">${timeStr}</span></div>
+                <div style="grid-column: span 2;">Correlation ID: <span style="font-family:var(--font-mono); font-size:10px; color:var(--text-muted);">${eventObj.correlation_id || '-'}</span></div>
+            </div>
+        </div>
+
+        <div style="margin-bottom: 16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <span style="font-size:11px; font-weight:700; color:var(--text-secondary); text-transform:uppercase;">Raw JSON Payload</span>
+                <button class="btn btn-secondary btn-sm" onclick="copyDrawerRawJson()">
+                    <i class="fas fa-copy"></i> Copy JSON
+                </button>
+            </div>
+            <pre class="drawer-raw-pre" id="drawerRawPre">${JSON.stringify(eventObj, null, 2)}</pre>
+        </div>
+    `;
+
+    drawer.classList.add('open');
+    if (backdrop) backdrop.classList.add('active');
+}
+
+function closeEventDetailDrawer() {
+    const drawer = document.getElementById('eventDetailDrawer');
+    const backdrop = document.getElementById('eventDrawerBackdrop');
+    if (drawer) drawer.classList.remove('open');
+    if (backdrop) backdrop.classList.remove('active');
+}
+
+function copyDrawerRawJson() {
+    const pre = document.getElementById('drawerRawPre');
+    if (!pre) return;
+    navigator.clipboard.writeText(pre.textContent).then(() => {
+        toastr.success('Event raw JSON copied to clipboard', 'Copied');
+    }).catch(() => {
+        toastr.info('Select and copy text directly from preview box.');
+    });
+}
+
+// =========================================================================
+// 10. TELEMETRY CSV EXPORT
+// =========================================================================
+
+function exportEventsCSV() {
+    if (!allFetchedEvents || allFetchedEvents.length === 0) {
+        toastr.warning('No security events available to export.');
+        return;
+    }
+
+    const headers = ['Event ID', 'Timestamp', 'Event Type', 'Client IP', 'HTTP Method', 'Path', 'Status Code', 'Severity', 'Correlation ID'];
+    const rows = allFetchedEvents.map(e => [
+        `"${e.event_id || ''}"`,
+        `"${e.timestamp || ''}"`,
+        `"${e.event_type || ''}"`,
+        `"${e.client_ip || ''}"`,
+        `"${e.method || e.http_method || 'GET'}"`,
+        `"${e.path || e.endpoint_path || ''}"`,
+        e.status_code || 200,
+        `"${e.severity || 'LOW'}"`,
+        `"${e.correlation_id || ''}"`
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const dateStr = new Date().toISOString().slice(0, 10);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `autoheal-telemetry-${dateStr}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toastr.success(`Exported ${allFetchedEvents.length} events to CSV`, 'Telemetry Export');
+}
+
+// =========================================================================
+// 11. 3D / 2.5D INTERACTIVE THREAT TOPOLOGY (THREE.JS) & ASSET DIRECTORY
+// =========================================================================
+
+let topologyRenderer = null;
+let topologyScene = null;
+let topologyCamera = null;
+let topologyAnimFrame = null;
+let topologyNodes = [];
+
+async function initTopology3D() {
+    const canvas = document.getElementById('topologyCanvas');
+    if (!canvas) return;
+
+    loadTopologyAssets(); // Also populate accessible 2D table
+
+    if (!window.THREE) {
+        console.warn('Three.js library not loaded; falling back to 2D asset table.');
+        toggleTopologyViewMode();
+        return;
+    }
+
+    const container = canvas.parentElement;
+    const width = container.clientWidth || 800;
+    const height = container.clientHeight || 480;
+
+    if (!topologyScene) {
+        topologyScene = new THREE.Scene();
+        topologyScene.background = new THREE.Color(0x04080F);
+
+        topologyCamera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
+        topologyCamera.position.set(0, 0, 160);
+
+        topologyRenderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+        topologyRenderer.setSize(width, height);
+        topologyRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+        topologyScene.add(ambientLight);
+
+        const pointLight = new THREE.PointLight(0x38BDF8, 1.4, 500);
+        pointLight.position.set(50, 50, 100);
+        topologyScene.add(pointLight);
+    }
+
+    // Clear previous node meshes
+    topologyNodes.forEach(n => {
+        if (n.mesh) topologyScene.remove(n.mesh);
+        if (n.line) topologyScene.remove(n.line);
+    });
+    topologyNodes = [];
+
+    // Fetch live asset inventory from /api/state
+    try {
+        const res = await fetch('/api/state');
+        const data = await res.json();
+        const devices = data.devices || [];
+
+        const radius = 55;
+        const count = Math.max(devices.length, 4);
+        devices.forEach((dev, idx) => {
+            const angle = (idx / count) * Math.PI * 2;
+            const x = Math.cos(angle) * radius;
+            const y = Math.sin(angle) * radius;
+            const z = (idx % 2 === 0 ? 1 : -1) * 12;
+
+            let colorHex = 0x22C55E; // Normal
+            if (dev.state === 'Compromised' || (dev.risk_score && dev.risk_score > 70)) colorHex = 0xEF4444;
+            else if (dev.state === 'Investigating' || (dev.risk_score && dev.risk_score > 30)) colorHex = 0xF59E0B;
+
+            const geom = new THREE.SphereGeometry(6, 24, 24);
+            const mat = new THREE.MeshPhongMaterial({
+                color: colorHex,
+                emissive: colorHex,
+                emissiveIntensity: 0.35,
+                shininess: 80
+            });
+            const mesh = new THREE.Mesh(geom, mat);
+            mesh.position.set(x, y, z);
+            topologyScene.add(mesh);
+
+            // Connect edge to center gateway hub
+            const lineMat = new THREE.LineBasicMaterial({ color: 0x253344, transparent: true, opacity: 0.6 });
+            const lineGeom = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(0, 0, 0),
+                new THREE.Vector3(x, y, z)
+            ]);
+            const line = new THREE.Line(lineGeom, lineMat);
+            topologyScene.add(line);
+
+            topologyNodes.push({ mesh, line, device: dev });
+        });
+
+        // Center hub node (Edge Security Gateway)
+        const hubGeom = new THREE.SphereGeometry(8, 24, 24);
+        const hubMat = new THREE.MeshPhongMaterial({
+            color: 0x38BDF8,
+            emissive: 0x38BDF8,
+            emissiveIntensity: 0.45
+        });
+        const hubMesh = new THREE.Mesh(hubGeom, hubMat);
+        hubMesh.position.set(0, 0, 0);
+        topologyScene.add(hubMesh);
+        topologyNodes.push({ mesh: hubMesh, device: { id: 'HUB', role: 'Edge Security Gateway' } });
+
+    } catch (e) {
+        console.error('Error initializing topology nodes', e);
+    }
+
+    if (!topologyAnimFrame) {
+        let clock = 0;
+        function animate() {
+            topologyAnimFrame = requestAnimationFrame(animate);
+            clock += 0.01;
+            if (topologyScene) {
+                topologyScene.rotation.y = Math.sin(clock * 0.2) * 0.2;
+                topologyScene.rotation.x = Math.cos(clock * 0.15) * 0.08;
+            }
+            if (topologyRenderer && topologyScene && topologyCamera) {
+                topologyRenderer.render(topologyScene, topologyCamera);
+            }
+        }
+        animate();
+    }
+}
+
+async function loadTopologyAssets() {
+    const tbody = document.getElementById('topologyAssetTableBody');
+    if (!tbody) return;
+    try {
+        const res = await fetch('/api/state');
+        if (!res.ok) return;
+        const data = await res.json();
+        const devices = data.devices || [];
+        if (devices.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:20px;">No assets discovered in telemetry.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = '';
+        devices.forEach(d => {
+            const tr = document.createElement('tr');
+            let stateBadge = '<span class="badge badge-success">NORMAL</span>';
+            if (d.state === 'Compromised') stateBadge = '<span class="badge badge-critical">COMPROMISED</span>';
+            else if (d.state === 'Investigating') stateBadge = '<span class="badge badge-warning">INVESTIGATING</span>';
+
+            tr.innerHTML = `
+                <td><strong style="color:var(--accent-cyan); font-family:var(--font-mono);">${d.id}</strong></td>
+                <td>${d.role || 'API Service'}</td>
+                <td><span class="badge badge-neutral">${d.zone || 'Corporate DMZ'}</span></td>
+                <td><code>${d.ip || '127.0.0.1'}</code></td>
+                <td>${stateBadge}</td>
+                <td><strong style="font-family:var(--font-mono); color:${d.risk_score > 50 ? 'var(--status-danger)' : 'var(--status-success)'}">${d.risk_score || 0}/100</strong></td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch (e) {
+        console.error('Error loading topology assets', e);
+    }
+}
+
+function toggleTopologyViewMode() {
+    const viewport = document.getElementById('topologyViewport');
+    const table = document.getElementById('topologyTableView');
+    const btn = document.getElementById('topologyToggleViewBtn');
+    if (!viewport || !table) return;
+
+    if (viewport.style.display === 'none') {
+        viewport.style.display = 'block';
+        table.style.display = 'none';
+        if (btn) btn.innerHTML = '<i class="fas fa-table"></i> Switch to 2D Table';
+    } else {
+        viewport.style.display = 'none';
+        table.style.display = 'block';
+        if (btn) btn.innerHTML = '<i class="fas fa-cube"></i> Switch to 3D Topology';
+        loadTopologyAssets();
+    }
+}
+
+// =========================================================================
+// 12. THREAT INTELLIGENCE IOC REPUTATION LOOKUP
+// =========================================================================
+
+async function lookupIOC() {
+    const input = document.getElementById('iocSearchInput');
+    const resultBox = document.getElementById('iocResultBox');
+    if (!input || !resultBox) return;
+
+    const query = input.value.trim();
+    if (!query) {
+        toastr.warning('Please enter an indicator (IP, domain, or hash) to search.');
+        return;
+    }
+
+    resultBox.innerHTML = '<div style="color:var(--accent-cyan);"><i class="fas fa-spinner fa-spin"></i> Querying threat intelligence cache...</div>';
+
+    try {
+        const resBlocked = await fetch('/api/security/blocked-clients');
+        const blockedData = resBlocked.ok ? await resBlocked.json() : [];
+        const isBlocked = blockedData.find(c => c.client_ip === query || (c.ip && c.ip === query));
+
+        const matchEvents = allFetchedEvents.filter(e => (e.client_ip && e.client_ip.includes(query)) || (e.path && e.path.includes(query)));
+
+        let riskLevel = 'LOW';
+        let riskScore = 15;
+        let riskColor = 'var(--status-success)';
+
+        if (isBlocked || matchEvents.length > 5) {
+            riskLevel = 'CRITICAL (HIGH MALICIOUS CONFIDENCE)';
+            riskScore = 95;
+            riskColor = 'var(--status-danger)';
+        } else if (matchEvents.length > 0) {
+            riskLevel = 'SUSPICIOUS / ELEVATED';
+            riskScore = 65;
+            riskColor = 'var(--status-warning)';
+        }
+
+        resultBox.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border-panel); padding-bottom:8px; margin-bottom:10px;">
+                <div>
+                    <strong style="color:var(--text-primary); font-family:var(--font-mono); font-size:13px;">${query}</strong>
+                    <div style="font-size:10px; color:var(--text-muted); margin-top:2px;">Indicator Type: IP / Endpoint Entity</div>
+                </div>
+                <div style="text-align:right;">
+                    <span class="badge" style="background:${riskColor}; color:#090D14; font-weight:800;">${riskLevel}</span>
+                    <div style="font-size:11px; font-weight:700; color:${riskColor}; margin-top:2px;">Threat Score: ${riskScore} / 100</div>
+                </div>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; font-size:11px; color:var(--text-secondary); line-height:1.6;">
+                <div>
+                    <div>Status: <strong style="color:${isBlocked ? 'var(--status-danger)' : 'var(--status-success)'};">${isBlocked ? 'ACTIVE QUARANTINE (403)' : 'CLEAN / UNRESTRICTED'}</strong></div>
+                    <div>Correlated Events: <strong>${matchEvents.length} records</strong></div>
+                </div>
+                <div>
+                    <div>Enrichment Source: <strong>AutoHeal Real-time Sentinel</strong></div>
+                    <div>Reputation: <strong>${riskScore > 50 ? 'Adversarial Telemetry Observed' : 'Nominal Baseline Profile'}</strong></div>
+                </div>
+            </div>
+        `;
+    } catch (e) {
+        resultBox.innerHTML = `<div style="color:var(--status-danger);"><i class="fas fa-exclamation-circle"></i> IOC query error: ${e.message}</div>`;
     }
 }
