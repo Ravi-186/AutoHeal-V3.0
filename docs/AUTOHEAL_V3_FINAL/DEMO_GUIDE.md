@@ -206,3 +206,4 @@ print('Demonstration environment cleanly reset to baseline.')
 - [ ] Browser caching is disabled or dev tools open to observe real API network calls.
 - [ ] WebGL is enabled in browser for 3D Threat Topology (or use the accessible 2D Table Fallback).
 - [ ] Test shopper account (`rahul.shopper@example.com` / `Demo@123`) is operational.
+
