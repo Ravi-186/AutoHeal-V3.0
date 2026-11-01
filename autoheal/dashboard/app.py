@@ -70,7 +70,7 @@ try:
     from src.appsec.models import list_security_incidents, get_active_blocked_clients, get_security_events, unblock_client_ip
     from src.appsec.reporter import AppSecReporter
     from src.appsec.security_tester import ShopSphereSecurityTester, validate_target_safety
-    from src.appsec.posture_scorer import PostureScorer
+    from src.appsec.posture_scorer import PostureScorer, SecurityPostureScorer
     from src.appsec.vulnerability_manager import VulnerabilityManager
     from src.appsec.ai_advisor import AISecurityAdvisor
 except ImportError:
@@ -78,7 +78,7 @@ except ImportError:
         from autoheal.src.appsec.models import list_security_incidents, get_active_blocked_clients, get_security_events, unblock_client_ip
         from autoheal.src.appsec.reporter import AppSecReporter
         from autoheal.src.appsec.security_tester import ShopSphereSecurityTester, validate_target_safety
-        from autoheal.src.appsec.posture_scorer import PostureScorer
+        from autoheal.src.appsec.posture_scorer import PostureScorer, SecurityPostureScorer
         from autoheal.src.appsec.vulnerability_manager import VulnerabilityManager
         from autoheal.src.appsec.ai_advisor import AISecurityAdvisor
     except Exception:

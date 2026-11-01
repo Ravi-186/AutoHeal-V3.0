@@ -232,6 +232,30 @@ class TestLiveSecurityTestingPipeline(unittest.TestCase):
         self.assertEqual(redacted["password"], "[REDACTED]")
         self.assertNotIn("SuperSecretPassword123!", str(redacted))
 
+    def test_11_replay_attack_comparison(self):
+        """Verifies the /api/security/test/replay endpoint executes and returns before/after comparisons."""
+        test_ip = "203.0.113.111"
+        unblock_client_ip(test_ip)
+
+        resp = self.client.post(
+            "/api/security/test/replay",
+            json={
+                "scenario": "sqli",
+                "target_url": "http://testserver",
+                "client_ip": test_ip
+            }
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["status"], "success")
+        self.assertEqual(data["scenario"], "sqli")
+        self.assertEqual(data["client_ip"], test_ip)
+        self.assertIn("before_state", data)
+        self.assertIn("after_state", data)
+        self.assertTrue(data["protection_verified"])
+
+        unblock_client_ip(test_ip)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -279,6 +279,15 @@ def init_db():
             except Exception:
                 pass  # column already exists
 
+        # Enterprise Database Performance Indexes
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_blocked_clients_ip_active ON blocked_clients (client_ip, is_active, expires_at);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_security_events_temporal ON security_events (client_ip, timestamp);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_security_events_type_time ON security_events (event_type, timestamp);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_security_incidents_status ON security_incidents (status, severity, created_at DESC);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_orders_customer_email ON orders (customer_email, created_at DESC);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_cart_items_user ON cart_items (user_or_session_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_wishlist_user ON wishlist (user_or_session_id);")
+
         conn.commit()
 
 
@@ -291,6 +300,7 @@ def seed_data():
 
         # Seed Default Admin & Customer Accounts
         admin_pw_hash, admin_salt = hash_password("Admin@123")
+        admin_token = f"token_admin_{secrets.token_hex(24)}"
         cursor.execute("""
         INSERT OR IGNORE INTO users (name, email, password_hash, salt, role, phone, address, city, pincode, token)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -304,10 +314,13 @@ def seed_data():
             "ShopSphere HQ, Cyber Tech Park",
             "Bengaluru",
             "560100",
-            "token_admin_shopsphere_secret"
+            admin_token
         ))
+        # Revoke and replace any legacy static backdoor token in existing databases
+        cursor.execute("UPDATE users SET token = ? WHERE token = 'token_admin_shopsphere_secret'", (admin_token,))
 
         demo_pw_hash, demo_salt = hash_password("Demo@123")
+        customer_token = f"token_{secrets.token_hex(24)}"
         cursor.execute("""
         INSERT OR IGNORE INTO users (name, email, password_hash, salt, role, phone, address, city, pincode, token)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -321,8 +334,9 @@ def seed_data():
             "Flat 402, Green Valley Apartments",
             "Bengaluru",
             "560034",
-            "token_demo_customer_session"
+            customer_token
         ))
+        cursor.execute("UPDATE users SET token = ? WHERE token = 'token_demo_customer_session'", (customer_token,))
 
         # Seed Categories matching the exact diagram categories
         categories = [

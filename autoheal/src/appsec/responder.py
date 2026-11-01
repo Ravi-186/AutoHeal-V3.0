@@ -111,7 +111,7 @@ class AppSecResponder:
             }
 
         # Execute live mitigation based on action type
-        execution_start = time.time()
+        execution_start = time.perf_counter()
         outcome_msg = ""
 
         if action_type in ["BLOCK_IP", "RATE_LIMIT"]:
@@ -132,7 +132,7 @@ class AppSecResponder:
             except Exception as e:
                 outcome_msg = f"Service recovery error: {str(e)}"
 
-        elapsed_ms = round((time.time() - execution_start) * 1000 + 12, 2)
+        elapsed_ms = round((time.perf_counter() - execution_start) * 1000, 2)
 
         # Component 4: Hand off to Verification Agent for follow-up testing
         from src.appsec.verifier import AppSecVerifier

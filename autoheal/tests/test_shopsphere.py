@@ -212,5 +212,38 @@ class TestAutoHealDemonstrationEngine(unittest.TestCase):
         self.assertTrue(reg_pass["passed"])
 
 
+class TestShopSphereAdminRBAC(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        init_db()
+        seed_data()
+
+    def test_admin_requires_authentication(self):
+        from fastapi import HTTPException
+        from shopsphere.api import require_admin_user
+
+        # 1. No authorization header -> 401
+        with self.assertRaises(HTTPException) as ctx:
+            require_admin_user(authorization=None)
+        self.assertEqual(ctx.exception.status_code, 401)
+
+        # 2. Old backdoor token must be rejected -> 401
+        with self.assertRaises(HTTPException) as ctx:
+            require_admin_user(authorization="Bearer token_admin_shopsphere_secret")
+        self.assertEqual(ctx.exception.status_code, 401)
+
+        # 3. Customer token cannot access admin -> 403
+        customer = UserService.login("rahul.shopper@example.com", "Demo@123")
+        with self.assertRaises(HTTPException) as ctx:
+            require_admin_user(authorization=f"Bearer {customer['token']}")
+        self.assertEqual(ctx.exception.status_code, 403)
+
+        # 4. Valid admin login token -> Allowed
+        admin = UserService.login("admin@shopsphere.com", "Admin@123")
+        user = require_admin_user(authorization=f"Bearer {admin['token']}")
+        self.assertEqual(user["email"], "admin@shopsphere.com")
+        self.assertEqual(user["role"], "admin")
+
+
 if __name__ == "__main__":
     unittest.main()

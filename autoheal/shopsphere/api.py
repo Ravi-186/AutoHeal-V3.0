@@ -85,9 +85,6 @@ def get_current_user(authorization: Optional[str] = Header(None)) -> Optional[Di
 def require_admin_user(authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
     user = get_current_user(authorization)
     if not user:
-        # Check if fallback master demo admin token passed
-        if authorization and "token_admin_shopsphere_secret" in authorization:
-            return {"name": "Admin", "email": "admin@shopsphere.com", "role": "admin"}
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required for admin access.")
     if user.get("role") != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Administrator privileges required.")

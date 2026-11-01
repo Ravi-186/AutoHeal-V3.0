@@ -63,5 +63,23 @@ class TestFastAPIEndpoints(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.json()["status"], "success")
 
+    def test_security_metrics_dynamic(self):
+        res = self.client.get("/api/security/metrics")
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertIn("total_events_recorded", data)
+        self.assertIn("total_incidents", data)
+        self.assertIn("average_remediation_ms", data)
+        self.assertIsInstance(data["average_remediation_ms"], (int, float))
+
+    def test_flipkart_heal_measured_latency(self):
+        res = self.client.post("/api/flipkart/attack/credential_stuffing")
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data["status"], "success")
+        self.assertTrue(data["healed_and_verified"])
+        self.assertIn("remediation_time_ms", data)
+        self.assertGreater(data["remediation_time_ms"], 0.0)
+
 if __name__ == '__main__':
     unittest.main()

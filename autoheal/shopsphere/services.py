@@ -400,62 +400,62 @@ class OrderService:
         order_ref = f"ORD-2026-{secrets.token_hex(4).upper()}"
 
         with get_db_connection() as conn:
-            cursor = conn.cursor()
+            with conn:  # Atomic transaction boundary; automatic rollback on any exception
+                cursor = conn.cursor()
 
-            # Verify stock and lock rows
-            for item in cart["items"]:
-                pid = item["product_id"]
-                qty = item["quantity"]
-                cursor.execute("SELECT stock, title FROM products WHERE id = ?", (pid,))
-                prod = cursor.fetchone()
-                if not prod or prod["stock"] < qty:
-                    raise ValueError(f"Insufficient stock for '{item['title']}'. Requested: {qty}, Available: {prod['stock'] if prod else 0}")
+                # Verify stock and lock rows
+                for item in cart["items"]:
+                    pid = item["product_id"]
+                    qty = item["quantity"]
+                    cursor.execute("SELECT stock, title FROM products WHERE id = ?", (pid,))
+                    prod = cursor.fetchone()
+                    if not prod or prod["stock"] < qty:
+                        raise ValueError(f"Insufficient stock for '{item['title']}'. Requested: {qty}, Available: {prod['stock'] if prod else 0}")
 
-            # Insert Order
-            cursor.execute("""
-            INSERT INTO orders (
-                order_ref, user_id, customer_name, customer_email, customer_phone,
-                shipping_address, city, pincode, payment_method, payment_status,
-                order_status, subtotal, discount, delivery_fee, total_amount
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                order_ref,
-                user_id,
-                customer_name.strip(),
-                customer_email.strip(),
-                customer_phone.strip(),
-                shipping_address.strip(),
-                city.strip(),
-                pincode.strip(),
-                payment_method,
-                "COMPLETED_SIMULATED",
-                "PLACED",
-                cart["subtotal"],
-                cart["discount"],
-                cart["delivery_fee"],
-                cart["final_total"]
-            ))
-            order_id = cursor.lastrowid
-
-            # Insert Order Items and Decrement Stock atomically
-            for item in cart["items"]:
-                pid = item["product_id"]
-                qty = item["quantity"]
-                unit_price = item["price"]
-                item_total = round(unit_price * qty, 2)
-
+                # Insert Order
                 cursor.execute("""
-                INSERT INTO order_items (order_id, product_id, title, unit_price, quantity, total_price)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """, (order_id, pid, item["title"], unit_price, qty, item_total))
+                INSERT INTO orders (
+                    order_ref, user_id, customer_name, customer_email, customer_phone,
+                    shipping_address, city, pincode, payment_method, payment_status,
+                    order_status, subtotal, discount, delivery_fee, total_amount
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    order_ref,
+                    user_id,
+                    customer_name.strip(),
+                    customer_email.strip(),
+                    customer_phone.strip(),
+                    shipping_address.strip(),
+                    city.strip(),
+                    pincode.strip(),
+                    payment_method,
+                    "COMPLETED_SIMULATED",
+                    "PLACED",
+                    cart["subtotal"],
+                    cart["discount"],
+                    cart["delivery_fee"],
+                    cart["final_total"]
+                ))
+                order_id = cursor.lastrowid
 
-                cursor.execute("""
-                UPDATE products SET stock = stock - ? WHERE id = ?
-                """, (qty, pid))
+                # Insert Order Items and Decrement Stock atomically
+                for item in cart["items"]:
+                    pid = item["product_id"]
+                    qty = item["quantity"]
+                    unit_price = item["price"]
+                    item_total = round(unit_price * qty, 2)
 
-            # Clear cart
-            cursor.execute("DELETE FROM cart_items WHERE user_or_session_id = ?", (user_or_session_id,))
-            conn.commit()
+                    cursor.execute("""
+                    INSERT INTO order_items (order_id, product_id, title, unit_price, quantity, total_price)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """, (order_id, pid, item["title"], unit_price, qty, item_total))
+
+                    cursor.execute("""
+                    UPDATE products SET stock = stock - ? WHERE id = ?
+                    """, (qty, pid))
+
+                # Clear cart
+                cursor.execute("DELETE FROM cart_items WHERE user_or_session_id = ?", (user_or_session_id,))
 
             return OrderService.get_order_by_id(order_id)
 

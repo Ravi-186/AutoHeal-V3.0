@@ -2393,11 +2393,13 @@
         // --- Admin Dashboard Modal ---
         async function openAdminModal() {
             try {
+                const token = localStorage.getItem('shopsphere_auth_token') || '';
                 const res = await fetch('/api/shop/admin/stats', {
-                    headers: { 'Authorization': 'Bearer token_admin_shopsphere_secret' }
+                    headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (!res.ok) {
-                    alert("Admin access restricted. Please log in as administrator.");
+                    alert("Admin access restricted. Please log in with an administrator account (e.g. admin@shopsphere.com / Admin@123).");
+                    openAuthModal();
                     return;
                 }
                 const stats = await res.json();
@@ -2432,11 +2434,12 @@
             const input = document.getElementById(`stockInput_${productId}`);
             const newStock = parseInt(input.value);
             try {
+                const token = localStorage.getItem('shopsphere_auth_token') || '';
                 const res = await fetch(`/api/shop/admin/products/${productId}/stock`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Authorization': 'Bearer token_admin_shopsphere_secret'
+                        'Authorization': `Bearer ${token}`
                     },
                     body: JSON.stringify({ stock: newStock })
                 });

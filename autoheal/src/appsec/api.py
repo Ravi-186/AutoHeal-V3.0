@@ -39,6 +39,23 @@ def get_security_metrics():
         if sev in sev_counts:
             sev_counts[sev] += 1
 
+    # Dynamic calculation of average remediation & verification latency from persisted telemetry
+    remediation_times = []
+    for inc in incidents:
+        ev = inc.get("evidence")
+        if isinstance(ev, dict):
+            probes = ev.get("verification_probes", [])
+            for p in probes:
+                if isinstance(p, dict) and "latency_ms" in p and p["latency_ms"] is not None:
+                    remediation_times.append(float(p["latency_ms"]))
+        actions = inc.get("mitigation_actions", [])
+        if isinstance(actions, list):
+            for a in actions:
+                if isinstance(a, dict) and "execution_time_ms" in a:
+                    remediation_times.append(float(a["execution_time_ms"]))
+
+    avg_remediation_ms = round(sum(remediation_times) / len(remediation_times), 2) if remediation_times else 0.0
+
     return {
         "status": "OPERATIONAL",
         "total_events_recorded": len(events),
@@ -46,7 +63,7 @@ def get_security_metrics():
         "active_blocked_ips": len(blocked),
         "incidents_by_severity": sev_counts,
         "active_threats": sum(1 for i in incidents if i.get("status") in ["OPEN", "MITIGATING"]),
-        "average_remediation_ms": 38.5
+        "average_remediation_ms": avg_remediation_ms
     }
 
 
@@ -380,21 +397,43 @@ def replay_attack_comparison(req: ReplayRequest):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@router.get("/incidents/{incident_id}/export", summary="Export Forensic Incident Dossier")
-def export_incident(incident_id: str, format: str = Query("json", pattern="^(json|pdf|markdown)$")):
-    """Exports an incident dossier as PDF, Markdown, or JSON."""
-    if format == "pdf":
-        pdf_bytes = AppSecReporter.generate_pdf_report(incident_id)
-        if not pdf_bytes:
-            raise HTTPException(status_code=404, detail="Incident not found or PDF generation failed")
-        return Response(
-            content=pdf_bytes,
-            media_type="application/pdf",
-            headers={"Content-Disposition": f"inline; filename=incident_{incident_id}.pdf"}
-        )
-    elif format == "markdown":
-        md = AppSecReporter.generate_markdown_report(incident_id)
-        return PlainTextResponse(md, media_type="text/markdown")
+    ip = req.client_ip or "198.51.100.99"
+    if req.scenario == "failed_logins":
+        test_result = tester.test_repeated_failed_logins(client_ip=ip, attempts=5)
+    elif req.scenario == "sqli":
+        test_result = tester.test_sql_injection(client_ip=ip, payload="Laptop' OR '1'='1")
+    elif req.scenario == "xss":
+        test_result = tester.test_cross_site_scripting(client_ip=ip)
+    elif req.scenario == "admin":
+        test_result = tester.test_unauthorized_admin(client_ip=ip)
+    elif req.scenario == "rate":
+        test_result = tester.test_request_rate_anomaly(client_ip=ip, count=25)
+    elif req.scenario == "health":
+        test_result = tester.test_health_cascade_resilience(client_ip=ip)
     else:
-        dossier = AppSecReporter.generate_json_dossier(incident_id)
-        return JSONResponse(dossier)
+        raise HTTPException(status_code=400, detail=f"Unsupported replay scenario: {req.scenario}")
+
+    traces = test_result.get("traces", [])
+    before_status = traces[0].get("status_code", 200) if traces else 200
+    after_probe = next((s for s in reversed(test_result.get("steps", [])) if s.get("step") == "VERIFICATION_PROBE"), None)
+    after_status = after_probe.get("status_code", 403) if after_probe else (403 if test_result.get("protection_verified") else 200)
+
+    return {
+        "status": "success",
+        "scenario": req.scenario,
+        "target_url": req.target_url,
+        "client_ip": ip,
+        "before_state": {
+            "initial_status_code": before_status,
+            "access_allowed": before_status not in [403, 429],
+            "description": "Pre-mitigation baseline request reached application layer."
+        },
+        "after_state": {
+            "quarantine_status_code": after_status,
+            "access_blocked": after_status in [403, 429],
+            "description": "Post-mitigation verification probe quarantined at perimeter." if after_status in [403, 429] else "Mitigation verification failed."
+        },
+        "protection_verified": test_result.get("protection_verified", False),
+        "incident_id": test_result.get("incident_id"),
+        "raw_test_result": test_result
+    }

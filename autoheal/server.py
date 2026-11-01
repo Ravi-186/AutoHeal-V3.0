@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional
@@ -152,7 +153,7 @@ def get_state():
     return NetworkStateResponse(
         devices=devices,
         active_threats=active_threats,
-        total_devices="{:,}".format(len(devices) * 1152 + 14),
+        total_devices=str(len(devices)),
         total_incidents=len(workflow_history),
         logs=logs
     )
@@ -396,10 +397,12 @@ def trigger_flipkart_attack(scenario: str):
         "audit_trail": []
     }
     running_state = dict(initial_state)
+    t_heal_start = time.perf_counter()
     for output in graph_manager.graph.stream(initial_state):
         for node_name, state_update in output.items():
             if isinstance(state_update, dict):
                 running_state.update(state_update)
+    remediation_time_ms = round((time.perf_counter() - t_heal_start) * 1000, 2)
 
     action_taken = running_state.get('action_taken', 'ISOLATE')
     is_verified = running_state.get('is_verified', False)
@@ -423,7 +426,7 @@ def trigger_flipkart_attack(scenario: str):
         "threat_description": description,
         "autonomous_action": action_taken,
         "healed_and_verified": is_verified,
-        "remediation_time_ms": 842,
+        "remediation_time_ms": remediation_time_ms,
         "service_state": network.devices[target].state,
         "audit_trail": running_state.get('audit_trail', [
             f"[Detection] Anomaly detected on {target} (Confidence: 0.95)",
@@ -431,7 +434,7 @@ def trigger_flipkart_attack(scenario: str):
             f"[Response] Autonomous Zero-Trust isolation applied. Traffic diverted to standby replica.",
             f"[Verification] Telemetry normalized. Storefront availability preserved."
         ]),
-        "message": f"AutoHeal autonomous agent swarm neutralized {mitre} on {target} in 842ms!"
+        "message": f"AutoHeal autonomous agent swarm neutralized {mitre} on {target} in {remediation_time_ms}ms!"
     }
 
 @app.post("/api/flipkart/restore", summary="Restore All Flipkart Microservices")

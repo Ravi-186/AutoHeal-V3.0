@@ -54,9 +54,19 @@ class ShopSphereSecurityTester:
     def __init__(self, base_url: str = "http://localhost:8000"):
         self.base_url = validate_target_safety(base_url)
 
+    def _get_client(self, timeout: float = 10.0) -> httpx.Client:
+        if "testserver" in self.base_url:
+            try:
+                from fastapi.testclient import TestClient
+                from server import app as server_app
+                return TestClient(server_app, base_url=self.base_url)
+            except Exception:
+                pass
+        return httpx.Client(base_url=self.base_url, timeout=timeout)
+
     def _unblock_ip(self, client: httpx.Client, ip: str):
         try:
-            client.post(f"{self.base_url}/api/security/unblock", json={"client_ip": ip}, timeout=5.0)
+            client.post("/api/security/unblock", json={"client_ip": ip}, timeout=5.0)
         except Exception:
             pass
 
@@ -74,7 +84,7 @@ class ShopSphereSecurityTester:
         and verifies that subsequent attempts are quarantined with HTTP 403.
         """
         steps = []
-        with httpx.Client(base_url=self.base_url, timeout=10.0) as client:
+        with self._get_client(timeout=10.0) as client:
             # Step 0: Ensure test IP is in clean unblocked state
             self._unblock_ip(client, client_ip)
             steps.append({"step": "INIT", "status": "Clean baseline established for test IP", "client_ip": client_ip})
@@ -162,7 +172,7 @@ class ShopSphereSecurityTester:
         AutoHeal Sentinel must intercept and drop the request with HTTP 403.
         """
         steps = []
-        with httpx.Client(base_url=self.base_url, timeout=10.0) as client:
+        with self._get_client(timeout=10.0) as client:
             self._unblock_ip(client, client_ip)
             headers = {"X-Forwarded-For": client_ip}
 
@@ -217,7 +227,7 @@ class ShopSphereSecurityTester:
         AutoHeal Sentinel intercepts and drops the request with HTTP 403.
         """
         steps = []
-        with httpx.Client(base_url=self.base_url, timeout=10.0) as client:
+        with self._get_client(timeout=10.0) as client:
             self._unblock_ip(client, client_ip)
             headers = {"X-Forwarded-For": client_ip}
 
@@ -265,7 +275,7 @@ class ShopSphereSecurityTester:
         Must be denied with HTTP 401 or 403 and access attempt audited.
         """
         steps = []
-        with httpx.Client(base_url=self.base_url, timeout=10.0) as client:
+        with self._get_client(timeout=10.0) as client:
             self._unblock_ip(client, client_ip)
             headers = {"X-Forwarded-For": client_ip}
 
@@ -313,7 +323,7 @@ class ShopSphereSecurityTester:
         Observes HTTP 429 Too Many Requests once rate limit threshold is crossed.
         """
         steps = []
-        with httpx.Client(base_url=self.base_url, timeout=10.0) as client:
+        with self._get_client(timeout=10.0) as client:
             self._unblock_ip(client, client_ip)
             headers = {"X-Forwarded-For": client_ip}
 
@@ -366,7 +376,7 @@ class ShopSphereSecurityTester:
         verifies exception is logged with correlation ID, and verifies storefront remains healthy.
         """
         steps = []
-        with httpx.Client(base_url=self.base_url, timeout=10.0) as client:
+        with self._get_client(timeout=10.0) as client:
             headers = {"X-Forwarded-For": client_ip}
 
             # Step 1: Trigger error
@@ -443,7 +453,7 @@ class ShopSphereSecurityTester:
         reset_cancellation()
         yield {"type": "log", "message": f"[*] Validating target safety: {self.base_url} [Localhost Boundary Enforced]", "status": "info"}
 
-        with httpx.Client(base_url=self.base_url, timeout=10.0) as client:
+        with self._get_client(timeout=10.0) as client:
             self._unblock_ip(client, client_ip)
             yield {"type": "log", "message": f"[*] Client IP {client_ip} initialized. Baseline nominal.", "status": "info"}
 
