@@ -14,7 +14,13 @@ from src.appsec.models import (
     get_active_blocked_clients, unblock_client_ip,
     get_security_event_by_id, get_related_security_events,
     query_security_events_advanced, record_event_investigation,
-    get_threat_intel, get_detection_rule_catalog
+    get_threat_intel, get_detection_rule_catalog,
+    get_incident_command_stats, query_incidents_paginated,
+    transition_incident_status, assign_incident_analyst,
+    update_incident_priority, update_incident_root_cause,
+    add_incident_note, build_incident_timeline,
+    get_incident_evidence_explorer, build_incident_attack_sequence,
+    get_incident_activity_logs, ConcurrencyError
 )
 from src.appsec.detector import AppSecDetector
 from src.appsec.responder import AppSecResponder
@@ -38,6 +44,50 @@ class InvestigationRequest(BaseModel):
     assigned_analyst: str = "admin@sentinel.sec"
     tags: Optional[List[str]] = None
     create_incident: bool = False
+
+
+class StatusTransitionRequest(BaseModel):
+    status: Optional[str] = None
+    target_status: Optional[str] = None
+    resolution_notes: Optional[str] = None
+    author: Optional[str] = "admin@sentinel.sec"
+    analyst: Optional[str] = None
+    expected_version: Optional[int] = None
+    current_version: Optional[int] = None
+
+
+class AssignAnalystRequest(BaseModel):
+    analyst: str
+    assigned_by: Optional[str] = "admin@sentinel.sec"
+    current_version: Optional[int] = None
+    expected_version: Optional[int] = None
+
+
+class UpdatePriorityRequest(BaseModel):
+    priority: str
+    reason: Optional[str] = ""
+    updated_by: Optional[str] = "admin@sentinel.sec"
+    analyst: Optional[str] = None
+    current_version: Optional[int] = None
+    expected_version: Optional[int] = None
+
+
+class UpdateRootCauseRequest(BaseModel):
+    entry_point: Optional[str] = None
+    suspected_entry_point: Optional[str] = ""
+    conditions: Optional[str] = None
+    contributing_conditions: Optional[str] = ""
+    conclusions: Optional[str] = None
+    analyst_conclusions: Optional[str] = ""
+    author: Optional[str] = "admin@sentinel.sec"
+    current_version: Optional[int] = None
+    expected_version: Optional[int] = None
+
+
+class AddNoteRequest(BaseModel):
+    note: Optional[str] = None
+    content: Optional[str] = None
+    author: Optional[str] = "admin@sentinel.sec"
 
 
 @router.get("/metrics", summary="Retrieve Live Application Security KPIs")
@@ -234,14 +284,97 @@ def get_rules_catalog():
     }
 
 
+@router.get("/incidents/stats", summary="Get Incident Command Center Stats")
+def get_incident_stats(time_range: str = Query("all")):
+    """Returns the 8 Incident Command Center KPI metrics."""
+    return get_incident_command_stats(time_range=time_range)
+
+
 @router.get("/incidents", summary="List Security Incidents")
 def list_incidents(
     status: Optional[str] = Query(None),
     severity: Optional[str] = Query(None),
-    limit: int = Query(50, le=200)
+    priority: Optional[str] = Query(None),
+    assigned_analyst: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    time_range: str = Query("all"),
+    sort_by: str = Query("created_at"),
+    sort_order: str = Query("desc"),
+    page: Optional[int] = Query(None),
+    page_size: Optional[int] = Query(None),
+    limit: Optional[int] = Query(None),
+    format: Optional[str] = Query(None)
 ):
-    """Lists security incidents with evidence and mitigation records."""
-    return list_security_incidents(status=status, severity=severity, limit=limit)
+    """Lists security incidents with filtering, search, pagination, and CSV export."""
+    if format == "csv":
+        import io
+        import csv
+        data = query_incidents_paginated(
+            status=status,
+            severity=severity,
+            priority=priority,
+            assigned_analyst=assigned_analyst,
+            search=search,
+            time_range=time_range,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            page=1,
+            page_size=1000
+        )
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow([
+            "incident_id", "title", "severity", "priority", "status",
+            "rule_id", "category", "source_ip", "assigned_analyst",
+            "confidence", "verification_status", "created_at", "updated_at"
+        ])
+        for inc in data.get("items", []):
+            def escape_csv_formula(val):
+                s = str(val or "")
+                if s and s[0] in ["=", "+", "-", "@"]:
+                    return "'" + s
+                return s
+            writer.writerow([
+                escape_csv_formula(inc.get("incident_id")),
+                escape_csv_formula(inc.get("title")),
+                escape_csv_formula(inc.get("severity")),
+                escape_csv_formula(inc.get("priority")),
+                escape_csv_formula(inc.get("status")),
+                escape_csv_formula(inc.get("rule_id")),
+                escape_csv_formula(inc.get("category")),
+                escape_csv_formula(inc.get("source_ip")),
+                escape_csv_formula(inc.get("assigned_analyst")),
+                inc.get("confidence", 1.0),
+                escape_csv_formula(inc.get("verification_status")),
+                escape_csv_formula(inc.get("created_at")),
+                escape_csv_formula(inc.get("updated_at"))
+            ])
+        output.seek(0)
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=autoheal_incidents_export.csv"}
+        )
+
+    # Return paginated envelope when pagination or advanced filtering query parameters are used
+    if page is not None or page_size is not None or search is not None or priority is not None or assigned_analyst is not None or (limit is not None and limit > 100):
+        p = page if page is not None else 1
+        ps = page_size if page_size is not None else (limit if limit is not None else 20)
+        return query_incidents_paginated(
+            status=status,
+            severity=severity,
+            priority=priority,
+            assigned_analyst=assigned_analyst,
+            search=search,
+            time_range=time_range,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            page=p,
+            page_size=ps
+        )
+
+    # Legacy fallback: returns list of incident dicts
+    return list_security_incidents(status=status, severity=severity, limit=limit or 50)
 
 
 @router.get("/incidents/{incident_id}", summary="Get Incident Dossier")
@@ -251,6 +384,145 @@ def get_incident_dossier(incident_id: str):
     if not inc:
         raise HTTPException(status_code=404, detail=f"Incident {incident_id} not found.")
     return inc
+
+
+@router.get("/incidents/{incident_id}/timeline", summary="Get Interactive Incident Timeline")
+def get_incident_timeline_endpoint(incident_id: str):
+    """Returns unified chronological timeline of telemetry, detections, response, and analyst activities."""
+    inc = get_security_incident(incident_id)
+    if not inc:
+        raise HTTPException(status_code=404, detail=f"Incident {incident_id} not found.")
+    return build_incident_timeline(incident_id)
+
+
+@router.get("/incidents/{incident_id}/evidence", summary="Get Digital Evidence Explorer Dossier")
+def get_incident_evidence_endpoint(incident_id: str):
+    """Returns structured forensic evidence with SHA-256 cryptographic integrity hash."""
+    inc = get_security_incident(incident_id)
+    if not inc:
+        raise HTTPException(status_code=404, detail=f"Incident {incident_id} not found.")
+    return get_incident_evidence_explorer(incident_id)
+
+
+@router.get("/incidents/{incident_id}/attack-sequence", summary="Get Attack Sequence Flow")
+def get_incident_attack_sequence_endpoint(incident_id: str):
+    """Returns 5-stage attack sequence distinguishing observed facts from analytical hypotheses."""
+    inc = get_security_incident(incident_id)
+    if not inc:
+        raise HTTPException(status_code=404, detail=f"Incident {incident_id} not found.")
+    return build_incident_attack_sequence(incident_id)
+
+
+@router.get("/incidents/{incident_id}/activity", summary="Get Incident Activity & Collaboration Log")
+def get_incident_activity_endpoint(incident_id: str):
+    """Returns chronological internal notes and audit history for the incident."""
+    inc = get_security_incident(incident_id)
+    if not inc:
+        raise HTTPException(status_code=404, detail=f"Incident {incident_id} not found.")
+    return get_incident_activity_logs(incident_id)
+
+
+@router.post("/incidents/{incident_id}/status", summary="Transition Incident Lifecycle Status")
+def transition_status_endpoint(incident_id: str, req: StatusTransitionRequest):
+    """Controlled lifecycle status transition with validation, verification checks, and audit logging."""
+    target_status = req.target_status or req.status
+    if not target_status:
+        raise HTTPException(status_code=400, detail="target_status is required.")
+    author = req.analyst or req.author or "admin@sentinel.sec"
+    expected_version = req.current_version if req.current_version is not None else req.expected_version
+    try:
+        updated = transition_incident_status(
+            incident_id=incident_id,
+            target_status=target_status,
+            resolution_notes=req.resolution_notes,
+            author=author,
+            expected_version=expected_version
+        )
+        return updated
+    except ConcurrencyError as ce:
+        raise HTTPException(status_code=409, detail=str(ce))
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+
+
+@router.post("/incidents/{incident_id}/assign", summary="Assign Incident to SOC Analyst")
+def assign_analyst_endpoint(incident_id: str, req: AssignAnalystRequest):
+    """Assigns or reassigns an incident to a SOC analyst with audit trail."""
+    author = req.assigned_by or "admin@sentinel.sec"
+    expected_version = req.current_version if req.current_version is not None else req.expected_version
+    try:
+        updated = assign_incident_analyst(
+            incident_id=incident_id,
+            analyst=req.analyst,
+            assigned_by=author,
+            expected_version=expected_version
+        )
+        return updated
+    except ConcurrencyError as ce:
+        raise HTTPException(status_code=409, detail=str(ce))
+    except ValueError as ve:
+        raise HTTPException(status_code=404, detail=str(ve))
+
+
+@router.post("/incidents/{incident_id}/priority", summary="Update Incident Priority")
+def update_priority_endpoint(incident_id: str, req: UpdatePriorityRequest):
+    """Updates incident priority with audit logging."""
+    author = req.analyst or req.updated_by or "admin@sentinel.sec"
+    expected_version = req.current_version if req.current_version is not None else req.expected_version
+    try:
+        updated = update_incident_priority(
+            incident_id=incident_id,
+            priority=req.priority,
+            updated_by=author,
+            reason=req.reason or "",
+            expected_version=expected_version
+        )
+        return updated
+    except ConcurrencyError as ce:
+        raise HTTPException(status_code=409, detail=str(ce))
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+
+
+@router.post("/incidents/{incident_id}/root-cause", summary="Save Root-Cause Analysis Findings")
+def update_root_cause_endpoint(incident_id: str, req: UpdateRootCauseRequest):
+    """Persists verified analyst root-cause findings."""
+    author = req.author or "admin@sentinel.sec"
+    expected_version = req.current_version if req.current_version is not None else req.expected_version
+    entry_point = req.entry_point if req.entry_point is not None else req.suspected_entry_point
+    conditions = req.conditions if req.conditions is not None else req.contributing_conditions
+    conclusions = req.conclusions if req.conclusions is not None else req.analyst_conclusions
+    try:
+        updated = update_incident_root_cause(
+            incident_id=incident_id,
+            suspected_entry_point=entry_point,
+            contributing_conditions=conditions,
+            analyst_conclusions=conclusions,
+            author=author,
+            expected_version=expected_version
+        )
+        return updated
+    except ConcurrencyError as ce:
+        raise HTTPException(status_code=409, detail=str(ce))
+    except ValueError as ve:
+        raise HTTPException(status_code=404, detail=str(ve))
+
+
+@router.post("/incidents/{incident_id}/notes", summary="Add Internal Analyst Note")
+def add_note_endpoint(incident_id: str, req: AddNoteRequest):
+    """Appends an internal investigation note to the incident timeline and audit trail."""
+    note_text = req.content if req.content is not None else (req.note or "")
+    if not note_text:
+        raise HTTPException(status_code=400, detail="Note content is required.")
+    try:
+        res = add_incident_note(
+            incident_id=incident_id,
+            note_text=note_text,
+            author=req.author or "admin@sentinel.sec"
+        )
+        return res
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
 
 
 @router.get("/incidents/{incident_id}/report", summary="Get Formatted Markdown Incident Report")

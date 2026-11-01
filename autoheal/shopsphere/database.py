@@ -265,14 +265,25 @@ def init_db():
         );
         """)
 
-        # Add optional MITRE and AI columns to security_incidents if not present
+        # Add optional MITRE, AI, and Phase 5 Enterprise Incident Command columns to security_incidents if not present
         extra_columns = [
             ("mitre_technique_id", "TEXT DEFAULT 'T1110.001'"),
             ("mitre_tactic", "TEXT DEFAULT 'Credential Access (TA0006)'"),
             ("mitre_name", "TEXT DEFAULT 'Brute Force: Password Guessing'"),
             ("ai_summary", "TEXT"),
             ("ai_recommendations_json", "TEXT"),
-            ("recovery_status", "TEXT DEFAULT 'CONTAINED'")
+            ("recovery_status", "TEXT DEFAULT 'CONTAINED'"),
+            ("assigned_analyst", "TEXT DEFAULT 'Unassigned'"),
+            ("priority", "TEXT DEFAULT 'HIGH'"),
+            ("related_simulation_id", "TEXT"),
+            ("suspected_entry_point", "TEXT"),
+            ("root_cause_summary", "TEXT"),
+            ("contributing_conditions", "TEXT"),
+            ("analyst_conclusions", "TEXT"),
+            ("resolution_notes", "TEXT"),
+            ("resolved_at", "TIMESTAMP"),
+            ("resolved_by", "TEXT"),
+            ("version", "INTEGER DEFAULT 1")
         ]
         for col_name, col_type in extra_columns:
             try:
@@ -332,6 +343,19 @@ def init_db():
         );
         """)
 
+        # 15. Incident Activity & Collaboration Logs Table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS incident_activity_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            incident_id TEXT NOT NULL,
+            action_type TEXT NOT NULL,
+            author TEXT NOT NULL DEFAULT 'admin@sentinel.sec',
+            content TEXT NOT NULL,
+            details_json TEXT DEFAULT '{}',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+
         # Enterprise Database Performance Indexes
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_blocked_clients_ip_active ON blocked_clients (client_ip, is_active, expires_at);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_security_events_temporal ON security_events (client_ip, timestamp);")
@@ -345,6 +369,10 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_sim_status ON simulation_executions (status);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_sim_time ON simulation_executions (start_time DESC);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_security_incidents_status ON security_incidents (status, severity, created_at DESC);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_security_incidents_assigned ON security_incidents (assigned_analyst);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_security_incidents_priority ON security_incidents (priority);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_incident_activity_inc ON incident_activity_logs (incident_id, created_at DESC);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_incident_activity_action ON incident_activity_logs (action_type);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_orders_customer_email ON orders (customer_email, created_at DESC);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_cart_items_user ON cart_items (user_or_session_id);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_wishlist_user ON wishlist (user_or_session_id);")

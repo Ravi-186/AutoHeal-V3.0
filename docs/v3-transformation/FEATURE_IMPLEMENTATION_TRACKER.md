@@ -115,12 +115,23 @@
 - [x] Complete Phase 4 Documentation Suite in `docs/v3-transformation/phase-4/` (8 documents) — *Verified*
 
 ### Module 5: Incident Command Center (Phase 5)
-- [x] Incident list with severity badges, status tags, and time ago — *Verified*
-- [x] Structured forensic incident dossier view (`#incidentDetailPanel`) — *Verified*
-- [x] Attack timeline stepper visualization — *Verified*
-- [x] Evidence inspector (payloads, headers, matched rule) — *Verified*
-- [x] Grounded AI Summary & MITRE ATT&CK alignment card — *Verified*
-- [x] Analyst actions: Manual remediation notes, follow-up verification trigger — *Verified*
+- [x] 8 Real-Time Operational KPI Metrics (`#incidentKpiGrid`) computed dynamically from SQLite records (`security_incidents`): Total Incidents, Active Incidents, Critical Severity, High Severity, Under Investigation, Pending Remediation, Verification Failures, Resolved Incidents — *Verified*
+- [x] Multi-Parametric Filter Toolbar with Time-Range (`all`, `1h`, `24h`, `7d`, `30d`), Severity (`ALL`, `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`), Status (`ALL`, `NEW`, `TRIAGED`, `INVESTIGATING`, `CONTAINMENT`, `REMEDIATION`, `VERIFICATION`, `RESOLVED`, `CLOSED`), Priority (`ALL`, `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`), Assigned Analyst, and Live Search — *Verified*
+- [x] RFC-4180 Spreadsheet Formula Injection Immune CSV Export (`format=csv`) with leading trigger character sanitization (`'`, `=`, `+`, `-`, `@`) — *Verified*
+- [x] Interactive Incident Table with severity badges, status tags, priority indicators, rule IDs, timestamps, assigned analysts, correlated event counts, and server-side pagination bar — *Verified*
+- [x] Dedicated Incident Detail Investigation Workspace (`#incidentDetailWorkspace`) featuring sticky header, telemetry summary strip, and 8 dedicated investigation tabs:
+  - [x] **Tab 1: Overview** — Executive summary, detection rationale, impact assessment, affected resources, and recommended investigation roadmap — *Verified*
+  - [x] **Tab 2: Event Timeline** — Chronological event sequence unifying ingress telemetry, correlation detection, incident creation, containment, verification, and analyst activity — *Verified*
+  - [x] **Tab 3: Digital Evidence Explorer** — SHA-256 cryptographic integrity hash badge, request/response metadata, syntax-highlighted payloads, Copy JSON, and Download JSON artifacts — *Verified*
+  - [x] **Tab 4: Attack Sequence Analysis** — 5-stage visual sequence (Reconnaissance -> Delivery -> Exploitation -> Escalation -> Exfiltration), Fact vs Analytical Hypothesis distinction, and MITRE ATT&CK enterprise mapping — *Verified*
+  - [x] **Tab 5: Root-Cause Analysis** — Suspected entry point, contributing conditions, confirmed analyst conclusions persistence via API, and advisory AI forensic card — *Verified*
+  - [x] **Tab 6: Response Actions** — SOAR action triggers: Dynamic IP Quarantine, Invalidate Tokens, AST Surgical Virtual Patch, and Rate-Limit Tightening — *Verified*
+  - [x] **Tab 7: Verification** — Dual-probe verification outcome (Attacker 403 vs Benign 200) and live "Run Verification Probe Now" action trigger — *Verified*
+  - [x] **Tab 8: Audit History & Notes** — Immutable audit trail (`incident_activity_logs`) and internal analyst collaboration thread with real-time "Add Note" form — *Verified*
+- [x] Incident Lifecycle State Machine enforcing valid state transitions, Optimistic Concurrency Control (`version`), and strict Resolution Gate (requiring verified status + mandatory resolution notes) — *Verified*
+- [x] Interactive Incident Modals: Status Transition Modal with resolution gate validation, Analyst Assignment Modal, and Priority Update Modal — *Verified*
+- [x] Automated Test Suite (`tests/test_incident_command_center.py`: 19/19 passed, 100% pass rate; 131/131 full workspace regression pass) — *Verified*
+- [x] Complete Phase 5 Documentation Suite in `docs/v3-transformation/phase-5/` (10 documents) — *Verified*
 
 ### Module 6: SOAR Automation Center (Phase 6)
 - [x] Playbook catalog with trigger rules and actions — *Verified*
