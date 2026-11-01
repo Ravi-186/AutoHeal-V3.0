@@ -167,6 +167,17 @@ def get_me(current_user: Optional[Dict[str, Any]] = Depends(get_current_user)):
     return current_user
 
 
+@router.post("/auth/logout", summary="Logout and Revoke Session Token")
+def logout(authorization: Optional[str] = Header(None)):
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Authorization header required.")
+    token = authorization.replace("Bearer ", "").strip()
+    revoked = UserService.logout(token)
+    if not revoked:
+        raise HTTPException(status_code=404, detail="Active session token not found or already revoked.")
+    return {"status": "success", "message": "Session token successfully revoked."}
+
+
 # --- 3. Shopping Cart Endpoints ---
 @router.get("/cart", summary="Retrieve Shopping Cart")
 def get_cart(

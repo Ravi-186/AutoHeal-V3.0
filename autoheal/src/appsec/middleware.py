@@ -26,6 +26,19 @@ class AppSecProtectionMiddleware(BaseHTTPMiddleware):
     RATE_LIMIT_WINDOW = 8.0  # seconds
     RATE_LIMIT_MAX_REQUESTS = 15  # requests per window
 
+    @staticmethod
+    def _apply_security_headers(response: Response, correlation_id: str, extra_headers: Dict[str, str] = None) -> Response:
+        """Applies enterprise defense-in-depth security headers to all HTTP responses."""
+        response.headers["X-Correlation-ID"] = correlation_id
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        if extra_headers:
+            for k, v in extra_headers.items():
+                response.headers[k] = v
+        return response
+
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         start_time = time.time()
         client_ip = request.client.host if request.client else "127.0.0.1"
@@ -43,8 +56,7 @@ class AppSecProtectionMiddleware(BaseHTTPMiddleware):
         # Exclude static assets and docs from heavy inspection
         if any(path.startswith(prefix) for prefix in ["/static", "/css", "/js", "/favicon.ico"]):
             response = await call_next(request)
-            response.headers["X-Correlation-ID"] = correlation_id
-            return response
+            return self._apply_security_headers(response, correlation_id)
 
         # 1. Check if Client IP is actively quarantined in blocklist
         blocked, block_info = is_client_blocked(client_ip)
@@ -60,7 +72,7 @@ class AppSecProtectionMiddleware(BaseHTTPMiddleware):
                 details=block_info,
                 action_taken="QUARANTINED"
             )
-            return JSONResponse(
+            resp = JSONResponse(
                 status_code=403,
                 content={
                     "error": "Access Blocked by AutoHeal AppSec Sentinel",
@@ -69,9 +81,9 @@ class AppSecProtectionMiddleware(BaseHTTPMiddleware):
                     "incident_id": block_info.get("incident_id"),
                     "expires_at": block_info.get("expires_at"),
                     "correlation_id": correlation_id
-                },
-                headers={"X-Correlation-ID": correlation_id}
+                }
             )
+            return self._apply_security_headers(resp, correlation_id)
 
         # 2. Check Sliding-Window Rate Limit (Rule RATE-001)
         now = time.time()
@@ -111,7 +123,7 @@ class AppSecProtectionMiddleware(BaseHTTPMiddleware):
                 details={"rate": len(timestamps), "window": self.RATE_LIMIT_WINDOW},
                 action_taken="RATE_LIMITED"
             )
-            return JSONResponse(
+            resp = JSONResponse(
                 status_code=429,
                 content={
                     "error": "Rate Limit Exceeded by AutoHeal AppSec Sentinel",
@@ -122,9 +134,9 @@ class AppSecProtectionMiddleware(BaseHTTPMiddleware):
                     "mitigation_action": mitigation.get("action_executed"),
                     "retry_after_seconds": 60,
                     "correlation_id": correlation_id
-                },
-                headers={"X-Correlation-ID": correlation_id, "Retry-After": "60"}
+                }
             )
+            return self._apply_security_headers(resp, correlation_id, extra_headers={"Retry-After": "60"})
 
         # 3. Read request body safely if POST/PUT without consuming it
         body_sample = ""
@@ -164,7 +176,7 @@ class AppSecProtectionMiddleware(BaseHTTPMiddleware):
                 details=detection.to_dict(),
                 action_taken="BLOCKED"
             )
-            return JSONResponse(
+            resp = JSONResponse(
                 status_code=403,
                 content={
                     "error": "Request Blocked by AutoHeal Application Security Sentinel",
@@ -175,15 +187,14 @@ class AppSecProtectionMiddleware(BaseHTTPMiddleware):
                     "mitigation_action": mitigation.get("action_executed"),
                     "confidence": detection.confidence,
                     "correlation_id": correlation_id
-                },
-                headers={"X-Correlation-ID": correlation_id}
+                }
             )
+            return self._apply_security_headers(resp, correlation_id)
 
         # 5. Process Request
         try:
             response = await call_next(request)
             latency_ms = round((time.time() - start_time) * 1000, 2)
-            response.headers["X-Correlation-ID"] = correlation_id
 
             status_code = response.status_code
             event_type = "NORMAL_REQUEST"
@@ -243,7 +254,7 @@ class AppSecProtectionMiddleware(BaseHTTPMiddleware):
                     )
                     AppSecResponder.execute_defensive_mitigation(brute_det)
 
-            return response
+            return self._apply_security_headers(response, correlation_id)
 
         except Exception as exc:
             latency_ms = round((time.time() - start_time) * 1000, 2)
@@ -258,12 +269,12 @@ class AppSecProtectionMiddleware(BaseHTTPMiddleware):
                 severity="CRITICAL",
                 details={"exception": str(exc)}
             )
-            return JSONResponse(
+            resp = JSONResponse(
                 status_code=500,
                 content={
                     "error": "Internal Server Error",
                     "correlation_id": correlation_id,
                     "detail": str(exc)
-                },
-                headers={"X-Correlation-ID": correlation_id}
+                }
             )
+            return self._apply_security_headers(resp, correlation_id)

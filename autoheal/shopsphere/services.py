@@ -1,7 +1,7 @@
 import json
 import secrets
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Any, Optional, Tuple
 
 from shopsphere.database import (
@@ -451,8 +451,10 @@ class OrderService:
                     """, (order_id, pid, item["title"], unit_price, qty, item_total))
 
                     cursor.execute("""
-                    UPDATE products SET stock = stock - ? WHERE id = ?
-                    """, (qty, pid))
+                    UPDATE products SET stock = stock - ? WHERE id = ? AND stock >= ?
+                    """, (qty, pid, qty))
+                    if cursor.rowcount == 0:
+                        raise ValueError(f"Insufficient stock for '{item['title']}' due to concurrent checkout demand.")
 
                 # Clear cart
                 cursor.execute("DELETE FROM cart_items WHERE user_or_session_id = ?", (user_or_session_id,))
@@ -504,31 +506,31 @@ class OrderService:
     def cancel_order(order_id: int, user_id: Optional[int] = None) -> Dict[str, Any]:
         """Cancels an order and automatically restores reserved product stock to inventory."""
         with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM orders WHERE id = ?", (order_id,))
-            order = cursor.fetchone()
-            if not order:
-                raise ValueError("Order not found.")
+            with conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT * FROM orders WHERE id = ?", (order_id,))
+                order = cursor.fetchone()
+                if not order:
+                    raise ValueError("Order not found.")
 
-            if user_id and order["user_id"] and order["user_id"] != user_id:
-                raise PermissionError("Unauthorized to cancel this order.")
+                if user_id and order["user_id"] and order["user_id"] != user_id:
+                    raise PermissionError("Unauthorized to cancel this order.")
 
-            if order["order_status"] in ["CANCELLED", "DELIVERED"]:
-                raise ValueError(f"Cannot cancel order in status '{order['order_status']}'.")
+                if order["order_status"] in ["CANCELLED", "DELIVERED"]:
+                    raise ValueError(f"Cannot cancel order in status '{order['order_status']}'.")
 
-            # Restore stock
-            cursor.execute("SELECT product_id, quantity FROM order_items WHERE order_id = ?", (order_id,))
-            items = cursor.fetchall()
-            for it in items:
+                # Restore stock
+                cursor.execute("SELECT product_id, quantity FROM order_items WHERE order_id = ?", (order_id,))
+                items = cursor.fetchall()
+                for it in items:
+                    cursor.execute("""
+                    UPDATE products SET stock = stock + ? WHERE id = ?
+                    """, (it["quantity"], it["product_id"]))
+
                 cursor.execute("""
-                UPDATE products SET stock = stock + ? WHERE id = ?
-                """, (it["quantity"], it["product_id"]))
-
-            cursor.execute("""
-            UPDATE orders SET order_status = 'CANCELLED', payment_status = 'REFUNDED_SIMULATED'
-            WHERE id = ?
-            """, (order_id,))
-            conn.commit()
+                UPDATE orders SET order_status = 'CANCELLED', payment_status = 'REFUNDED_SIMULATED'
+                WHERE id = ?
+                """, (order_id,))
 
             return OrderService.get_order_by_id(order_id)
 
@@ -547,14 +549,15 @@ class UserService:
 
         pw_hash, salt = hash_password(password)
         token = f"token_{secrets.token_hex(24)}"
+        token_expires_at = (datetime.now(timezone.utc) + timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
 
         with get_db_connection() as conn:
             cursor = conn.cursor()
             try:
                 cursor.execute("""
-                INSERT INTO users (name, email, password_hash, salt, role, phone, address, city, pincode, token)
-                VALUES (?, ?, ?, ?, 'customer', ?, ?, ?, ?, ?)
-                """, (name.strip(), email.strip().lower(), pw_hash, salt, phone.strip(), address.strip(), city.strip(), pincode.strip(), token))
+                INSERT INTO users (name, email, password_hash, salt, role, phone, address, city, pincode, token, token_expires_at)
+                VALUES (?, ?, ?, ?, 'customer', ?, ?, ?, ?, ?, ?)
+                """, (name.strip(), email.strip().lower(), pw_hash, salt, phone.strip(), address.strip(), city.strip(), pincode.strip(), token, token_expires_at))
                 conn.commit()
                 user_id = cursor.lastrowid
                 return {
@@ -573,7 +576,7 @@ class UserService:
 
     @staticmethod
     def login(email: str, password: str) -> Dict[str, Any]:
-        """Authenticates user and returns active session token."""
+        """Authenticates user and returns active session token with 7-day expiration."""
         seed_data()
         with get_db_connection() as conn:
             cursor = conn.cursor()
@@ -583,10 +586,11 @@ class UserService:
             if not user or not verify_password(password, user["password_hash"], user["salt"]):
                 raise ValueError("Invalid email or password.")
 
-            # Refresh token with role prefix
+            # Refresh token with role prefix and 7-day expiration
             prefix = "token_admin_" if user["role"] == "admin" else "token_"
             new_token = f"{prefix}{secrets.token_hex(24)}"
-            cursor.execute("UPDATE users SET token = ? WHERE id = ?", (new_token, user["id"]))
+            token_expires_at = (datetime.now(timezone.utc) + timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+            cursor.execute("UPDATE users SET token = ?, token_expires_at = ? WHERE id = ?", (new_token, token_expires_at, user["id"]))
             conn.commit()
 
             return {
@@ -603,14 +607,42 @@ class UserService:
 
     @staticmethod
     def get_by_token(token: str) -> Optional[Dict[str, Any]]:
-        """Retrieves user by authorization token."""
+        """Retrieves user by authorization token with expiration and timing-attack resistance."""
         if not token:
             return None
+        now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT id, name, email, role, phone, address, city, pincode, token FROM users WHERE token = ?", (token,))
+            cursor.execute("""
+            SELECT id, name, email, role, phone, address, city, pincode, token, token_expires_at 
+            FROM users 
+            WHERE token = ?
+            """, (token,))
             row = cursor.fetchone()
-            return dict(row) if row else None
+            if not row:
+                return None
+
+            # Constant-time token verification
+            if not secrets.compare_digest(row["token"], token):
+                return None
+
+            # Enforce server-side session expiration
+            if "token_expires_at" in row.keys() and row["token_expires_at"]:
+                if str(row["token_expires_at"]) < now_str:
+                    return None  # Session expired
+
+            return dict(row)
+
+    @staticmethod
+    def logout(token: str) -> bool:
+        """Revokes an active session token server-side."""
+        if not token:
+            return False
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE users SET token = NULL, token_expires_at = NULL WHERE token = ?", (token,))
+            conn.commit()
+            return cursor.rowcount > 0
 
 
 class AdminService:

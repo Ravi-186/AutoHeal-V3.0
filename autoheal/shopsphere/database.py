@@ -65,6 +65,7 @@ def init_db():
             city TEXT,
             pincode TEXT,
             token TEXT,
+            token_expires_at TIMESTAMP,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         """)
@@ -279,6 +280,12 @@ def init_db():
             except Exception:
                 pass  # column already exists
 
+        # Migration: Ensure users table has token_expires_at column
+        try:
+            cursor.execute("ALTER TABLE users ADD COLUMN token_expires_at TIMESTAMP;")
+        except Exception:
+            pass
+
         # Enterprise Database Performance Indexes
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_blocked_clients_ip_active ON blocked_clients (client_ip, is_active, expires_at);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_security_events_temporal ON security_events (client_ip, timestamp);")
@@ -337,6 +344,7 @@ def seed_data():
             customer_token
         ))
         cursor.execute("UPDATE users SET token = ? WHERE token = 'token_demo_customer_session'", (customer_token,))
+        cursor.execute("UPDATE users SET token_expires_at = datetime('now', '+365 days') WHERE token_expires_at IS NULL;")
 
         # Seed Categories matching the exact diagram categories
         categories = [

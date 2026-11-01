@@ -107,9 +107,9 @@ class AutoHealDemoEngine:
     def apply_autoheal_patch() -> Dict[str, Any]:
         """Step 10: Surgically fixes the root cause and restores correct calculation."""
         global SIMULATE_CART_BUG
-        start_time = time.time()
+        start_time = time.perf_counter()
         SIMULATE_CART_BUG = False
-        duration_ms = round((time.time() - start_time) * 1000 + 42, 2)
+        duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
 
         return {
             "status": "HEALED",

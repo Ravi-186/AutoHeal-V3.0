@@ -176,7 +176,17 @@ class AppSecDetector:
         # 3. Check for Unauthorized Admin Probing (Rule AUTH-002)
         if "/admin" in path.lower() and not path.startswith("/api/docs"):
             auth_header = (headers or {}).get("authorization", "")
-            if not auth_header or "token_admin" not in auth_header:
+            token = auth_header.replace("Bearer ", "").strip() if auth_header else ""
+            is_valid_admin = False
+            if token and token.startswith("token_admin_"):
+                try:
+                    from shopsphere.services import UserService
+                    user = UserService.get_by_token(token)
+                    if user and user.get("role") == "admin":
+                        is_valid_admin = True
+                except Exception:
+                    pass
+            if not is_valid_admin:
                 return DetectionResult(
                     triggered=True,
                     rule_id="AUTH-002",
