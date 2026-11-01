@@ -32,3 +32,22 @@ Thumbs.db
 
 # Logs & temp
 *.log
+
+# AutoHeal local databases
+autoheal/data/*.db
+autoheal/data/*.sqlite
+autoheal/data/*.sqlite3
+
+# Generated runtime security logs
+autoheal/data/device_logs.csv
+autoheal/data/dns_logs.csv
+autoheal/data/firewall_logs.csv
+autoheal/data/login_logs.csv
+
+# Temporary files
+*.log
+__pycache__/
+.pytest_cache/
+.venv/
+venv/
+node_modules/
