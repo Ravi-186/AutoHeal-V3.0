@@ -28,56 +28,90 @@
                 </div>
             </div>
 
-            <nav class="sidebar-nav">
-                <div class="sidebar-section-label">Operations</div>
-                <button class="nav-item-btn active" data-page="pageOverview" title="Overview Dashboard">
-                    <i class="fas fa-chart-pie"></i>
-                    <span class="nav-label">Overview Dashboard</span>
-                </button>
-                <button class="nav-item-btn" data-page="pageEvents" title="Live Threat Center">
-                    <i class="fas fa-satellite-dish"></i>
-                    <span class="nav-label">Live Threat Center</span>
-                </button>
-                <button class="nav-item-btn" data-page="pageAttackCenter" title="Attack Simulation Center">
-                    <i class="fas fa-crosshairs"></i>
-                    <span class="nav-label">Attack Simulation</span>
-                </button>
-                <button class="nav-item-btn" data-page="pageIncidents" title="Incident Command Center">
-                    <i class="fas fa-shield-virus"></i>
-                    <span class="nav-label">Incident Command</span>
-                    <span class="badge-count" id="navIncidentCount">0</span>
+            <nav class="sidebar-nav" aria-label="SOC Navigation">
+                <div class="sidebar-section-label">Overview</div>
+                <button class="nav-item-btn active" data-page="pageOverview" title="SOC Overview" aria-label="SOC Overview">
+                    <i class="fas fa-chart-pie" aria-hidden="true"></i>
+                    <span class="nav-label">SOC Overview</span>
                 </button>
 
-                <div class="sidebar-section-label">Autonomous Defense</div>
-                <button class="nav-item-btn" data-page="pageSoar" title="SOAR Automation Center">
-                    <i class="fas fa-robot"></i>
-                    <span class="nav-label">SOAR Automation</span>
+                <div class="sidebar-section-label">Threat Operations</div>
+                <button class="nav-item-btn" data-page="pageEvents" title="Live Threat Center" aria-label="Live Threat Center">
+                    <i class="fas fa-satellite-dish" aria-hidden="true"></i>
+                    <span class="nav-label">Live Threat Center</span>
                 </button>
-                <button class="nav-item-btn" data-page="pageHealing" title="Self-Healing Center">
-                    <i class="fas fa-hand-holding-medical"></i>
-                    <span class="nav-label">Self-Healing Center</span>
+                <button class="nav-item-btn" data-page="pageAttackCenter" title="Attack Simulator" aria-label="Attack Simulator">
+                    <i class="fas fa-crosshairs" aria-hidden="true"></i>
+                    <span class="nav-label">Attack Simulator</span>
                 </button>
-                <button class="nav-item-btn" data-page="pageThreatIntel" title="Threat Intelligence & IOCs">
-                    <i class="fas fa-brain"></i>
+                <button class="nav-item-btn" data-page="pageEventsTable" title="Security Events" aria-label="Security Events">
+                    <i class="fas fa-list-ul" aria-hidden="true"></i>
+                    <span class="nav-label">Security Events</span>
+                </button>
+                <button class="nav-item-btn" data-page="pageThreatIntel" title="Threat Intelligence" aria-label="Threat Intelligence">
+                    <i class="fas fa-brain" aria-hidden="true"></i>
                     <span class="nav-label">Threat Intelligence</span>
                 </button>
-                <button class="nav-item-btn" data-page="pageMitre" title="MITRE ATT&CK Matrix">
-                    <i class="fas fa-th"></i>
+                <button class="nav-item-btn" data-page="pageMitre" title="MITRE ATT&CK" aria-label="MITRE ATT&CK">
+                    <i class="fas fa-th" aria-hidden="true"></i>
                     <span class="nav-label">MITRE ATT&CK</span>
                 </button>
 
-                <div class="sidebar-section-label">Infrastructure & Audit</div>
-                <button class="nav-item-btn" data-page="pageTopology" title="Asset & Topology Map">
-                    <i class="fas fa-network-wired"></i>
-                    <span class="nav-label">Asset & Topology</span>
+                <div class="sidebar-section-label">Incident Response</div>
+                <button class="nav-item-btn" data-page="pageIncidents" title="Incident Center" aria-label="Incident Center">
+                    <i class="fas fa-shield-virus" aria-hidden="true"></i>
+                    <span class="nav-label">Incident Center</span>
+                    <span class="badge-count" id="navIncidentCount">0</span>
                 </button>
-                <button class="nav-item-btn" data-page="pageReports" title="Incident Reports">
-                    <i class="fas fa-file-invoice"></i>
-                    <span class="nav-label">Incident Reports</span>
+                <button class="nav-item-btn" data-page="pageInvestigation" title="Incident Investigation" aria-label="Incident Investigation">
+                    <i class="fas fa-microscope" aria-hidden="true"></i>
+                    <span class="nav-label">Incident Investigation</span>
                 </button>
-                <button class="nav-item-btn" data-page="pageSettings" title="Administration & Audit">
-                    <i class="fas fa-sliders-h"></i>
-                    <span class="nav-label">Admin & Audit</span>
+                <button class="nav-item-btn" data-page="pageSoar" title="SOAR Automation" aria-label="SOAR Automation">
+                    <i class="fas fa-robot" aria-hidden="true"></i>
+                    <span class="nav-label">SOAR Automation</span>
+                </button>
+                <button class="nav-item-btn" data-page="pageHealing" title="Self-Healing" aria-label="Self-Healing">
+                    <i class="fas fa-hand-holding-medical" aria-hidden="true"></i>
+                    <span class="nav-label">Self-Healing</span>
+                </button>
+
+                <div class="sidebar-section-label">Asset Management</div>
+                <button class="nav-item-btn" data-page="pageTopology" title="Asset Explorer" aria-label="Asset Explorer">
+                    <i class="fas fa-network-wired" aria-hidden="true"></i>
+                    <span class="nav-label">Asset Explorer</span>
+                </button>
+                <button class="nav-item-btn" data-page="pagePosture" title="Security Posture" aria-label="Security Posture">
+                    <i class="fas fa-shield-halved" aria-hidden="true"></i>
+                    <span class="nav-label">Security Posture</span>
+                </button>
+
+                <div class="sidebar-section-label">Analytics</div>
+                <button class="nav-item-btn" data-page="pageReports" title="Reports" aria-label="Reports">
+                    <i class="fas fa-file-invoice" aria-hidden="true"></i>
+                    <span class="nav-label">Reports</span>
+                </button>
+                <button class="nav-item-btn" data-page="pageAnalytics" title="Security Analytics" aria-label="Security Analytics">
+                    <i class="fas fa-chart-line" aria-hidden="true"></i>
+                    <span class="nav-label">Security Analytics</span>
+                </button>
+
+                <div class="sidebar-section-label">Administration</div>
+                <button class="nav-item-btn" data-page="pageUsers" title="Users and Roles" aria-label="Users and Roles">
+                    <i class="fas fa-users-cog" aria-hidden="true"></i>
+                    <span class="nav-label">Users and Roles</span>
+                </button>
+                <button class="nav-item-btn" data-page="pageAudit" title="Audit Logs" aria-label="Audit Logs">
+                    <i class="fas fa-receipt" aria-hidden="true"></i>
+                    <span class="nav-label">Audit Logs</span>
+                </button>
+                <button class="nav-item-btn" data-page="pageHealth" title="System Health" aria-label="System Health">
+                    <i class="fas fa-heartbeat" aria-hidden="true"></i>
+                    <span class="nav-label">System Health</span>
+                </button>
+                <button class="nav-item-btn" data-page="pageSettings" title="Settings" aria-label="Settings">
+                    <i class="fas fa-sliders-h" aria-hidden="true"></i>
+                    <span class="nav-label">Settings</span>
                 </button>
             </nav>
 
@@ -110,25 +144,77 @@
 
                 <div class="topbar-right">
                     <!-- Command Palette Search Button (Ctrl+K) -->
-                    <button class="cmd-palette-trigger" onclick="toggleCommandPalette(true)">
-                        <i class="fas fa-search"></i>
+                    <button class="cmd-palette-trigger" onclick="toggleCommandPalette(true)" title="Search SOC &amp; Jump to Module (Ctrl+K)" aria-label="Search SOC Command Palette">
+                        <i class="fas fa-search" aria-hidden="true"></i>
                         <span>Search SOC...</span>
                         <span class="cmd-shortcut-chip">Ctrl K</span>
                     </button>
 
-                    <!-- Sentinel Heartbeat Pill -->
-                    <div class="status-pill" id="sentinelStatusPill">
+                    <!-- Sentinel Heartbeat Pill with accessible tooltip -->
+                    <div class="status-pill" id="sentinelStatusPill" data-tooltip="Sentinel Engine: SSE stream live, latency <2ms">
                         <span class="indicator-dot"></span>
                         <span id="sentinelStatusText">SENTINEL OPERATIONAL</span>
                     </div>
 
                     <!-- Live Clock -->
-                    <div class="clock-display" id="currentTime">00:00:00 UTC</div>
+                    <div class="clock-display" id="currentTime" aria-label="UTC Clock">00:00:00 UTC</div>
 
-                    <!-- User Role Badge -->
-                    <div class="user-badge">
-                        <i class="fas fa-user-shield"></i>
-                        <span>SOC ADMIN</span>
+                    <!-- Theme High-Contrast Mode Toggle -->
+                    <button class="topbar-btn" id="themeToggleBtn" onclick="toggleContrastTheme()" title="Toggle High-Contrast Obsidian Mode" aria-label="Toggle High-Contrast Obsidian Mode">
+                        <i class="fas fa-circle-half-stroke" aria-hidden="true"></i>
+                    </button>
+
+                    <!-- Notifications Dropdown -->
+                    <div class="notification-container" id="notificationContainer">
+                        <button class="topbar-btn" id="notificationBellBtn" onclick="toggleNotificationDropdown()" title="System Notifications &amp; Alerts" aria-label="System Notifications &amp; Alerts" aria-haspopup="true" aria-expanded="false">
+                            <i class="fas fa-bell" aria-hidden="true"></i>
+                            <span class="notification-badge" id="notificationBadge">0</span>
+                        </button>
+                        <div class="notification-dropdown" id="notificationDropdown" role="menu">
+                            <div class="notification-dropdown-header">
+                                <span><i class="fas fa-satellite-dish" style="color:var(--accent-cyan);"></i> Active Sentinel Alerts</span>
+                                <button class="btn btn-ghost btn-sm" onclick="clearAllNotifications()" style="font-size:10px; padding:2px 6px;">Clear</button>
+                            </div>
+                            <div class="notification-list" id="notificationList">
+                                <div class="notification-item" onclick="switchToTab('pageEvents')">
+                                    <i class="fas fa-shield-check notification-item-icon" style="color:var(--status-success);"></i>
+                                    <div class="notification-item-content">
+                                        <div class="notification-item-title">Autonomous Baseline Active</div>
+                                        <div class="notification-item-meta">All 6 defensive modules operational • 0s ago</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- User Profile & RBAC Role Menu -->
+                    <div class="user-profile-container" id="userProfileContainer">
+                        <button class="user-profile-btn" id="userProfileBtn" onclick="toggleUserProfileDropdown()" title="User Profile &amp; Role Settings" aria-label="User Profile &amp; Role Settings" aria-haspopup="true" aria-expanded="false">
+                            <i class="fas fa-user-shield" aria-hidden="true"></i>
+                            <span id="topbarUsername">SOC Admin</span>
+                            <span class="profile-role-tag" id="topbarRoleTag">LEAD</span>
+                        </button>
+                        <div class="user-profile-dropdown" id="userProfileDropdown" role="menu">
+                            <div class="profile-dropdown-header">
+                                <div class="profile-name">Sentinel SOC Lead</div>
+                                <div class="profile-email">admin@sentinel.sec</div>
+                                <span class="profile-role-tag" id="profileModalRoleBadge">SOC Lead / Tier 3</span>
+                            </div>
+                            <div style="padding: 4px 10px; font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Role Preview Mode</div>
+                            <button class="profile-dropdown-item" onclick="switchUserRole('soc_admin')">
+                                <i class="fas fa-user-shield" style="color:var(--accent-cyan);"></i> SOC Administrator
+                            </button>
+                            <button class="profile-dropdown-item" onclick="switchUserRole('security_analyst')">
+                                <i class="fas fa-magnifying-glass-chart" style="color:var(--status-warning);"></i> Security Analyst (Tier 2)
+                            </button>
+                            <button class="profile-dropdown-item" onclick="switchUserRole('compliance_auditor')">
+                                <i class="fas fa-clipboard-check" style="color:var(--status-success);"></i> Compliance Auditor
+                            </button>
+                            <div class="profile-dropdown-divider"></div>
+                            <button class="profile-dropdown-item danger" onclick="openLogoutModal()">
+                                <i class="fas fa-arrow-right-from-bracket"></i> Terminate Session
+                            </button>
+                        </div>
                     </div>
                 </div>
             </header>
@@ -340,6 +426,85 @@
                 </section>
 
                 <!-- ===================================================================
+                     SECURITY EVENTS EXPLORER (DEDICATED TELEMETRY LOG)
+                     =================================================================== -->
+                <section id="pageEventsTable" class="workspace-page">
+                    <div class="page-header-ribbon">
+                        <div>
+                            <h2><i class="fas fa-list-ul" style="color: var(--primary);"></i> Security Events Explorer</h2>
+                            <p>Full telemetry log with real-time filters, multi-column search, and deep forensic inspection</p>
+                        </div>
+                        <div style="display: flex; gap: 10px;">
+                            <button class="btn btn-secondary" onclick="loadSecurityEvents()">
+                                <i class="fas fa-sync-alt"></i> Refresh Log
+                            </button>
+                            <button class="btn btn-primary" onclick="exportEventsCSV()">
+                                <i class="fas fa-download"></i> Export CSV
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Search & Filter Controls -->
+                    <div class="soc-card" style="margin-bottom: 14px;">
+                        <div class="soc-card-body" style="padding: 12px 18px; display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap;">
+                            <div style="display: flex; gap: 8px; align-items: center; flex: 1; min-width: 280px;">
+                                <div style="position: relative; width: 100%;">
+                                    <input type="text" id="fullEventsSearchInput" class="soc-input" placeholder="Search by IP, path, event ID, or payload keyword..." oninput="filterFullEventsTable()">
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <div class="date-range-picker">
+                                    <button class="date-quick-btn active" onclick="setEventFilterRange('all')">All</button>
+                                    <button class="date-quick-btn" onclick="setEventFilterRange('1h')">1h</button>
+                                    <button class="date-quick-btn" onclick="setEventFilterRange('24h')">24h</button>
+                                    <button class="date-quick-btn" onclick="setEventFilterRange('7d')">7d</button>
+                                </div>
+                                <select class="soc-select" id="fullEventsSevSelect" onchange="filterFullEventsTable()" style="width: 140px;">
+                                    <option value="ALL">All Severities</option>
+                                    <option value="CRITICAL">Critical Only</option>
+                                    <option value="HIGH">High Only</option>
+                                    <option value="MEDIUM">Medium Only</option>
+                                    <option value="LOW">Low Only</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="soc-card">
+                        <div class="soc-table-wrapper">
+                            <table class="soc-table">
+                                <thead>
+                                    <tr>
+                                        <th>Timestamp</th>
+                                        <th>Event Type</th>
+                                        <th>Method</th>
+                                        <th>Status</th>
+                                        <th>Source IP</th>
+                                        <th>Endpoint Path</th>
+                                        <th>Severity</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="fullEventsTableBody">
+                                    <tr>
+                                        <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;">
+                                            <i class="fas fa-spinner fa-spin"></i> Loading telemetry events...
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="pagination">
+                            <div id="fullEventsPaginationInfo">Showing 1-25 of 124 records</div>
+                            <div class="pagination-controls">
+                                <button class="page-btn" disabled><i class="fas fa-chevron-left"></i> Prev</button>
+                                <button class="page-btn">Next <i class="fas fa-chevron-right"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ===================================================================
                      MODULE 3: ATTACK SIMULATION CENTER
                      =================================================================== -->
                 <section id="pageAttackCenter" class="workspace-page">
@@ -519,6 +684,87 @@
                         </div>
                         <div class="soc-card-body" id="incidentDetailContent">
                             <!-- Populated dynamically by inspectIncident() -->
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ===================================================================
+                     INCIDENT INVESTIGATION & FORENSIC DOSSIER
+                     =================================================================== -->
+                <section id="pageInvestigation" class="workspace-page">
+                    <div class="page-header-ribbon">
+                        <div>
+                            <h2><i class="fas fa-microscope" style="color: var(--primary);"></i> Incident Investigation &amp; Forensics</h2>
+                            <p>Root-cause tree, multi-stage attack reconstruction, and verified containment audit</p>
+                        </div>
+                        <div style="display: flex; gap: 10px;">
+                            <button class="btn btn-secondary" onclick="loadIncidentsList(); populateInvestigationDropdown();">
+                                <i class="fas fa-sync-alt"></i> Refresh Incidents
+                            </button>
+                            <button class="btn btn-primary" onclick="investigateActiveIncident()">
+                                <i class="fas fa-magnifying-glass"></i> Analyze Selected
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Incident Selector Bar -->
+                    <div class="soc-card" style="margin-bottom: 16px;">
+                        <div class="soc-card-body" style="padding: 12px 18px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+                            <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 300px;">
+                                <label style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;">Select Incident:</label>
+                                <select class="soc-select" id="investigationIncidentSelect" onchange="investigateSelectedIncident(this.value)" style="max-width: 450px;">
+                                    <option value="">-- Choose an incident to investigate --</option>
+                                </select>
+                            </div>
+                            <div style="display: flex; gap: 8px;">
+                                <span class="badge badge-success" id="investigationStatusBadge">READY</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Investigation Workspace Grid -->
+                    <div style="display: grid; grid-template-columns: 1fr 1.3fr; gap: 18px; margin-bottom: 20px;">
+                        <!-- Root Cause & Attack Vector Summary -->
+                        <div class="soc-card" style="margin-bottom: 0;">
+                            <div class="soc-card-header">
+                                <h3><i class="fas fa-sitemap" style="color: var(--accent-cyan);"></i> Root-Cause &amp; MITRE Alignment</h3>
+                                <span class="badge badge-neutral" id="investigationSevBadge">SEVERITY</span>
+                            </div>
+                            <div class="soc-card-body" id="investigationRootCauseContent">
+                                <div class="empty-state" style="padding: 30px 16px;">
+                                    <i class="fas fa-folder-open empty-state-icon"></i>
+                                    <div class="empty-state-title">No Incident Selected</div>
+                                    <div class="empty-state-description">Select an incident from the dropdown above or inspect an incident from the Incident Command Center to view root cause forensics.</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 5-Stage Attack Timeline & Containment Stepper -->
+                        <div class="soc-card" style="margin-bottom: 0;">
+                            <div class="soc-card-header">
+                                <h3><i class="fas fa-timeline" style="color: var(--status-success);"></i> Attack &amp; Remediation Timeline</h3>
+                                <span class="badge badge-success">VERIFIED 100%</span>
+                            </div>
+                            <div class="soc-card-body" id="investigationTimelineContent">
+                                <div class="empty-state" style="padding: 30px 16px;">
+                                    <i class="fas fa-clock empty-state-icon"></i>
+                                    <div class="empty-state-title">Timeline Awaiting Selection</div>
+                                    <div class="empty-state-description">Forensic telemetry timestamps and containment milestones will render once an incident is active.</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Forensic Evidence & Raw Artifacts -->
+                    <div class="soc-card">
+                        <div class="soc-card-header">
+                            <h3><i class="fas fa-code-compare" style="color: var(--accent-purple);"></i> Correlated Telemetry &amp; Verification Evidence</h3>
+                            <button class="btn btn-secondary btn-sm" onclick="copyInvestigationEvidence()">
+                                <i class="fas fa-copy"></i> Copy Artifacts
+                            </button>
+                        </div>
+                        <div class="soc-card-body">
+                            <pre class="drawer-raw-pre" id="investigationRawEvidence" style="max-height: 220px;">// Raw correlated events, perimeter firewall records, and containment verification probes will appear here...</pre>
                         </div>
                     </div>
                 </section>
@@ -916,6 +1162,130 @@
                 </section>
 
                 <!-- ===================================================================
+                     SECURITY POSTURE & DEFENSIVE MATRIX
+                     =================================================================== -->
+                <section id="pagePosture" class="workspace-page">
+                    <div class="page-header-ribbon">
+                        <div>
+                            <h2><i class="fas fa-shield-halved" style="color: var(--primary);"></i> Security Posture &amp; Defensive Matrix</h2>
+                            <p>Enterprise hardening criteria, defense-in-depth components, and verification telemetry</p>
+                        </div>
+                        <div style="display: flex; gap: 10px;">
+                            <button class="btn btn-secondary" onclick="loadSecurityPosture()">
+                                <i class="fas fa-sync-alt"></i> Recalculate Score
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Posture Score Ribbon -->
+                    <div class="soc-card" style="margin-bottom: 20px;">
+                        <div class="soc-card-body" style="padding: 24px;">
+                            <div style="display: grid; grid-template-columns: 200px 1fr 1fr; gap: 24px; align-items: center;">
+                                <div style="text-align: center; border-right: 1px solid var(--border-panel); padding-right: 20px;">
+                                    <div style="font-size: 56px; font-weight: 900; font-family: var(--font-mono); color: var(--status-success); line-height: 1;" id="postureMatrixScore">92</div>
+                                    <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-top: 6px;">Posture Rating</div>
+                                    <span class="badge badge-success" style="margin-top: 6px;">GRADE A • HARDENED</span>
+                                </div>
+                                <div>
+                                    <h4 style="font-size: 14px; font-weight: 800; color: var(--text-primary); margin-bottom: 6px;">Autonomous Defense Status</h4>
+                                    <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 12px;">All 7 security pillars are active with zero unverified remediations. Dynamic sliding-window telemetry rate limiters and AST self-healing hooks are operational.</p>
+                                    <div style="display: flex; gap: 8px;">
+                                        <span class="badge badge-info"><i class="fas fa-check"></i> AST Engine Active</span>
+                                        <span class="badge badge-success"><i class="fas fa-check"></i> Dual-Probe Enforcing</span>
+                                        <span class="badge badge-neutral"><i class="fas fa-check"></i> Zero-Trust DMZ</span>
+                                    </div>
+                                </div>
+                                <div style="background: var(--bg-card-subtle); border: 1px solid var(--border-panel); border-radius: var(--radius-sm); padding: 14px;">
+                                    <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px;">Target Isolation Boundary</div>
+                                    <div style="font-size: 12px; color: var(--text-primary); font-family: var(--font-mono);"><i class="fas fa-circle-check" style="color:var(--status-success);"></i> 127.0.0.1 / ShopSphere Sandbox</div>
+                                    <div style="font-size: 11px; color: var(--text-dim); margin-top: 4px;">External network probing blocked by perimeter middleware.</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Core Defensive Pillars Matrix -->
+                    <div class="soc-card">
+                        <div class="soc-card-header">
+                            <h3><i class="fas fa-list-check" style="color: var(--accent-cyan);"></i> Defensive Component Health &amp; Enforcement Matrix</h3>
+                            <span class="badge badge-success">7/7 PILLARS ACTIVE</span>
+                        </div>
+                        <div class="soc-table-wrapper">
+                            <table class="soc-table">
+                                <thead>
+                                    <tr>
+                                        <th>Component Code</th>
+                                        <th>Defensive Pillar</th>
+                                        <th>Enforcement Mechanism</th>
+                                        <th>Verification Method</th>
+                                        <th>Status</th>
+                                        <th>Efficacy</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><code>NEW-DEF-001</code></td>
+                                        <td><strong>Unified AppSec Middleware</strong></td>
+                                        <td>Token-bucket rate shaping &amp; perimeter quarantine</td>
+                                        <td>HTTP 429 &amp; 403 Response Validation</td>
+                                        <td><span class="badge badge-success">ENFORCING</span></td>
+                                        <td><strong style="color:var(--status-success); font-family:var(--font-mono);">100%</strong></td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>NEW-DEF-002</code></td>
+                                        <td><strong>AST Autonomous Patching</strong></td>
+                                        <td>ast.NodeTransformer Python source surgical patch</td>
+                                        <td>Isolated Regression Test Suite</td>
+                                        <td><span class="badge badge-success">ENFORCING</span></td>
+                                        <td><strong style="color:var(--status-success); font-family:var(--font-mono);">100%</strong></td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>NEW-DEF-003</code></td>
+                                        <td><strong>Dual-Probe Containment</strong></td>
+                                        <td>Adversary probe (403) vs Benign probe (200)</td>
+                                        <td>Automated Follow-up Probing</td>
+                                        <td><span class="badge badge-success">ENFORCING</span></td>
+                                        <td><strong style="color:var(--status-success); font-family:var(--font-mono);">100%</strong></td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>NEW-DEF-004</code></td>
+                                        <td><strong>Immutable Audit Trail</strong></td>
+                                        <td>Cryptographic incident event hashing &amp; WAL ledger</td>
+                                        <td>SHA-256 Checksum Signature</td>
+                                        <td><span class="badge badge-success">ENFORCING</span></td>
+                                        <td><strong style="color:var(--status-success); font-family:var(--font-mono);">100%</strong></td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>NEW-DEF-005</code></td>
+                                        <td><strong>Dynamic Quarantine Manager</strong></td>
+                                        <td>Sliding-window IP block with auto-expiration TTL</td>
+                                        <td>Perimeter Rule Registry</td>
+                                        <td><span class="badge badge-success">ENFORCING</span></td>
+                                        <td><strong style="color:var(--status-success); font-family:var(--font-mono);">100%</strong></td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>NEW-DEF-006</code></td>
+                                        <td><strong>Zero-Trust Microsegmentation</strong></td>
+                                        <td>DMZ isolation &amp; internal tier segregation</td>
+                                        <td>State Engine Topology Probe</td>
+                                        <td><span class="badge badge-success">ENFORCING</span></td>
+                                        <td><strong style="color:var(--status-success); font-family:var(--font-mono);">100%</strong></td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>NEW-DEF-007</code></td>
+                                        <td><strong>MITRE ATT&CK Engine</strong></td>
+                                        <td>T1190, T1059, T1110, T1078, T1499 correlation</td>
+                                        <td>Detection Signature Telemetry</td>
+                                        <td><span class="badge badge-success">ENFORCING</span></td>
+                                        <td><strong style="color:var(--status-success); font-family:var(--font-mono);">100%</strong></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ===================================================================
                      MODULE 10: INCIDENT REPORTS
                      =================================================================== -->
                 <section id="pageReports" class="workspace-page">
@@ -951,6 +1321,140 @@
                                     </tr>
                                 </tbody>
                             </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ===================================================================
+                     SECURITY ANALYTICS & SOC METRICS
+                     =================================================================== -->
+                <section id="pageAnalytics" class="workspace-page">
+                    <div class="page-header-ribbon">
+                        <div>
+                            <h2><i class="fas fa-chart-line" style="color: var(--primary);"></i> Security Analytics &amp; SOC Performance</h2>
+                            <p>MTTD, MTTR benchmarks, threat frequency telemetry, and mitigation efficiency</p>
+                        </div>
+                        <div style="display: flex; gap: 10px;">
+                            <button class="btn btn-secondary" onclick="loadDashboardMetrics()">
+                                <i class="fas fa-sync-alt"></i> Refresh Analytics
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Benchmark KPI Grid -->
+                    <div class="kpi-grid">
+                        <div class="kpi-card kpi-info">
+                            <div class="kpi-label"><span>Mean Time to Detect (MTTD)</span> <i class="fas fa-stopwatch"></i></div>
+                            <div class="kpi-value" style="color: var(--accent-cyan);">1.8s</div>
+                            <div class="kpi-sub">Sliding-window stream threshold</div>
+                        </div>
+                        <div class="kpi-card kpi-success">
+                            <div class="kpi-label"><span>Mean Time to Respond (MTTR)</span> <i class="fas fa-bolt"></i></div>
+                            <div class="kpi-value" style="color: var(--status-success);">3.4s</div>
+                            <div class="kpi-sub">Autonomous SOAR containment</div>
+                        </div>
+                        <div class="kpi-card kpi-warning">
+                            <div class="kpi-label"><span>Containment Efficacy</span> <i class="fas fa-shield-halved"></i></div>
+                            <div class="kpi-value" style="color: var(--status-warning);">99.4%</div>
+                            <div class="kpi-sub">Dual-probe verified containment</div>
+                        </div>
+                        <div class="kpi-card kpi-purple">
+                            <div class="kpi-label"><span>Zero-Day Defenses</span> <i class="fas fa-dna"></i></div>
+                            <div class="kpi-value" style="color: var(--accent-purple);">Active</div>
+                            <div class="kpi-sub">Isolation Forest + AST Healing</div>
+                        </div>
+                    </div>
+
+                    <!-- Analytics Visual Grid -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 20px;">
+                        <!-- Threat Frequency Histogram -->
+                        <div class="soc-card" style="margin-bottom: 0;">
+                            <div class="soc-card-header">
+                                <h3><i class="fas fa-chart-column" style="color: var(--accent-cyan);"></i> Weekly Threat Velocity Distribution</h3>
+                                <span class="badge badge-neutral">7-Day Rolling</span>
+                            </div>
+                            <div class="soc-card-body">
+                                <div style="display: flex; align-items: flex-end; justify-content: space-between; height: 180px; padding-top: 20px; border-bottom: 1px solid var(--border-panel); gap: 12px;">
+                                    <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px;">
+                                        <div style="width: 100%; height: 35%; background: rgba(56, 189, 248, 0.25); border-top: 2px solid var(--accent-cyan); border-radius: 2px 2px 0 0;"></div>
+                                        <span style="font-size: 10px; color: var(--text-muted); font-family: var(--font-mono);">MON</span>
+                                    </div>
+                                    <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px;">
+                                        <div style="width: 100%; height: 50%; background: rgba(56, 189, 248, 0.25); border-top: 2px solid var(--accent-cyan); border-radius: 2px 2px 0 0;"></div>
+                                        <span style="font-size: 10px; color: var(--text-muted); font-family: var(--font-mono);">TUE</span>
+                                    </div>
+                                    <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px;">
+                                        <div style="width: 100%; height: 80%; background: rgba(239, 68, 68, 0.35); border-top: 2px solid var(--status-danger); border-radius: 2px 2px 0 0;"></div>
+                                        <span style="font-size: 10px; color: var(--status-danger); font-weight: 700; font-family: var(--font-mono);">WED</span>
+                                    </div>
+                                    <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px;">
+                                        <div style="width: 100%; height: 40%; background: rgba(56, 189, 248, 0.25); border-top: 2px solid var(--accent-cyan); border-radius: 2px 2px 0 0;"></div>
+                                        <span style="font-size: 10px; color: var(--text-muted); font-family: var(--font-mono);">THU</span>
+                                    </div>
+                                    <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px;">
+                                        <div style="width: 100%; height: 60%; background: rgba(245, 158, 11, 0.3); border-top: 2px solid var(--status-warning); border-radius: 2px 2px 0 0;"></div>
+                                        <span style="font-size: 10px; color: var(--text-muted); font-family: var(--font-mono);">FRI</span>
+                                    </div>
+                                    <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px;">
+                                        <div style="width: 100%; height: 25%; background: rgba(34, 197, 94, 0.25); border-top: 2px solid var(--status-success); border-radius: 2px 2px 0 0;"></div>
+                                        <span style="font-size: 10px; color: var(--text-muted); font-family: var(--font-mono);">SAT</span>
+                                    </div>
+                                    <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px;">
+                                        <div style="width: 100%; height: 45%; background: rgba(56, 189, 248, 0.25); border-top: 2px solid var(--accent-cyan); border-radius: 2px 2px 0 0;"></div>
+                                        <span style="font-size: 10px; color: var(--text-muted); font-family: var(--font-mono);">SUN</span>
+                                    </div>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); margin-top: 10px;">
+                                    <span>Average Threat Velocity: <strong>14.2 / hr</strong></span>
+                                    <span style="color: var(--status-danger);">Peak Ingestion: <strong>68 / hr (Wed)</strong></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Attack Vector Breakdown -->
+                        <div class="soc-card" style="margin-bottom: 0;">
+                            <div class="soc-card-header">
+                                <h3><i class="fas fa-pie-chart" style="color: var(--accent-purple);"></i> Attack Vector Proportions</h3>
+                                <span class="badge badge-neutral">Correlated</span>
+                            </div>
+                            <div class="soc-card-body" style="display: flex; flex-direction: column; gap: 12px;">
+                                <div>
+                                    <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px;">
+                                        <span>SQL Injection (T1190)</span>
+                                        <strong style="color: var(--status-danger); font-family: var(--font-mono);">38%</strong>
+                                    </div>
+                                    <div style="height: 6px; width: 100%; background: var(--bg-card-subtle); border-radius: var(--radius-pill); overflow: hidden;">
+                                        <div style="width: 38%; height: 100%; background: var(--status-danger);"></div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px;">
+                                        <span>Credential Stuffing &amp; Brute Force (T1110)</span>
+                                        <strong style="color: var(--status-warning); font-family: var(--font-mono);">29%</strong>
+                                    </div>
+                                    <div style="height: 6px; width: 100%; background: var(--bg-card-subtle); border-radius: var(--radius-pill); overflow: hidden;">
+                                        <div style="width: 29%; height: 100%; background: var(--status-warning);"></div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px;">
+                                        <span>Endpoint Rate Flooding / DoS (T1499)</span>
+                                        <strong style="color: var(--accent-cyan); font-family: var(--font-mono);">21%</strong>
+                                    </div>
+                                    <div style="height: 6px; width: 100%; background: var(--bg-card-subtle); border-radius: var(--radius-pill); overflow: hidden;">
+                                        <div style="width: 21%; height: 100%; background: var(--accent-cyan);"></div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px;">
+                                        <span>Admin Privilege Probing (T1078)</span>
+                                        <strong style="color: var(--accent-purple); font-family: var(--font-mono);">12%</strong>
+                                    </div>
+                                    <div style="height: 6px; width: 100%; background: var(--bg-card-subtle); border-radius: var(--radius-pill); overflow: hidden;">
+                                        <div style="width: 12%; height: 100%; background: var(--accent-purple);"></div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </section>
@@ -1033,6 +1537,294 @@
                     </div>
                 </section>
 
+                <!-- ===================================================================
+                     USERS AND ROLES (RBAC MANAGEMENT)
+                     =================================================================== -->
+                <section id="pageUsers" class="workspace-page">
+                    <div class="page-header-ribbon">
+                        <div>
+                            <h2><i class="fas fa-users-cog" style="color: var(--primary);"></i> User Administration &amp; RBAC</h2>
+                            <p>Role-based access permissions, multi-analyst directory, and active session enforcement</p>
+                        </div>
+                        <div style="display: flex; gap: 10px;">
+                            <button class="btn btn-secondary" onclick="loadUsersTable()">
+                                <i class="fas fa-sync-alt"></i> Refresh Users
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- User Directory Table -->
+                    <div class="soc-card">
+                        <div class="soc-card-header">
+                            <h3><i class="fas fa-id-badge" style="color: var(--accent-cyan);"></i> Authorized Security Operations Personnel</h3>
+                            <span class="badge badge-success">4 ACTIVE ACCOUNTS</span>
+                        </div>
+                        <div class="soc-table-wrapper">
+                            <table class="soc-table">
+                                <thead>
+                                    <tr>
+                                        <th>Analyst Identity</th>
+                                        <th>Assigned RBAC Role</th>
+                                        <th>Privilege Tier</th>
+                                        <th>MFA / Auth Status</th>
+                                        <th>Last Active</th>
+                                        <th>Session Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>
+                                            <div style="font-weight:700; color:var(--text-primary);">Sentinel Lead Admin</div>
+                                            <div style="font-size:11px; color:var(--text-muted); font-family:var(--font-mono);">admin@sentinel.sec</div>
+                                        </td>
+                                        <td><span class="badge badge-info">SOC ADMINISTRATOR</span></td>
+                                        <td><span class="badge badge-purple">TIER 3 • ROOT</span></td>
+                                        <td><span style="color:var(--status-success); font-size:11px;"><i class="fas fa-shield-check"></i> FIDO2 / WebAuthn</span></td>
+                                        <td><span style="color:var(--status-success);">Active Now</span></td>
+                                        <td><span class="badge badge-neutral">CURRENT SESSION</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td>
+                                            <div style="font-weight:700; color:var(--text-primary);">Sarah Chen (Tier 2)</div>
+                                            <div style="font-size:11px; color:var(--text-muted); font-family:var(--font-mono);">s.chen@sentinel.sec</div>
+                                        </td>
+                                        <td><span class="badge badge-warning">SECURITY ANALYST</span></td>
+                                        <td><span class="badge badge-neutral">TIER 2 • REMEDIATE</span></td>
+                                        <td><span style="color:var(--status-success); font-size:11px;"><i class="fas fa-shield-check"></i> TOTP Authenticated</span></td>
+                                        <td><span>12m ago</span></td>
+                                        <td><button class="btn btn-secondary btn-sm" onclick="toastr.info('Session verified active.');"><i class="fas fa-eye"></i> Audit</button></td>
+                                    </tr>
+                                    <tr>
+                                        <td>
+                                            <div style="font-weight:700; color:var(--text-primary);">Marcus Vance (Compliance)</div>
+                                            <div style="font-size:11px; color:var(--text-muted); font-family:var(--font-mono);">m.vance@audit.sentinel.sec</div>
+                                        </td>
+                                        <td><span class="badge badge-success">COMPLIANCE AUDITOR</span></td>
+                                        <td><span class="badge badge-neutral">TIER 1 • READ-ONLY</span></td>
+                                        <td><span style="color:var(--status-success); font-size:11px;"><i class="fas fa-shield-check"></i> SSO Enforced</span></td>
+                                        <td><span>1h ago</span></td>
+                                        <td><button class="btn btn-secondary btn-sm" onclick="toastr.info('Session verified active.');"><i class="fas fa-eye"></i> Audit</button></td>
+                                    </tr>
+                                    <tr>
+                                        <td>
+                                            <div style="font-weight:700; color:var(--text-primary);">Autonomous Sentinel AI</div>
+                                            <div style="font-size:11px; color:var(--text-muted); font-family:var(--font-mono);">daemon@autoheal.sentinel.local</div>
+                                        </td>
+                                        <td><span class="badge badge-critical">AUTONOMOUS SOAR AGENT</span></td>
+                                        <td><span class="badge badge-purple">SYSTEM DAEMON</span></td>
+                                        <td><span style="color:var(--accent-cyan); font-size:11px;"><i class="fas fa-key"></i> Internal Mutual TLS</span></td>
+                                        <td><span style="color:var(--status-success);">Continuous</span></td>
+                                        <td><span class="badge badge-success">PROTECTED</span></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- RBAC Permissions Matrix -->
+                    <div class="soc-card">
+                        <div class="soc-card-header">
+                            <h3><i class="fas fa-matrix" style="color: var(--accent-purple);"></i> Principle of Least Privilege: Role Permissions Matrix</h3>
+                            <span class="badge badge-neutral">Enforced at API Gateway</span>
+                        </div>
+                        <div class="soc-table-wrapper">
+                            <table class="soc-table">
+                                <thead>
+                                    <tr>
+                                        <th>Operation / Action</th>
+                                        <th>SOC Administrator</th>
+                                        <th>Security Analyst</th>
+                                        <th>Compliance Auditor</th>
+                                        <th>Autonomous Daemon</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>Dispatch Attack Simulation</td>
+                                        <td style="color:var(--status-success);"><i class="fas fa-check"></i> Full Access</td>
+                                        <td style="color:var(--status-warning);"><i class="fas fa-check"></i> Dry-Run Only</td>
+                                        <td style="color:var(--status-danger);"><i class="fas fa-xmark"></i> Denied</td>
+                                        <td style="color:var(--status-success);"><i class="fas fa-check"></i> Automated Probes</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Approve AST Source Patch</td>
+                                        <td style="color:var(--status-success);"><i class="fas fa-check"></i> Full Access</td>
+                                        <td style="color:var(--status-warning);"><i class="fas fa-clock"></i> Propose Only</td>
+                                        <td style="color:var(--status-danger);"><i class="fas fa-xmark"></i> Denied</td>
+                                        <td style="color:var(--status-success);"><i class="fas fa-check"></i> Auto-Apply</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Quarantine / Unblock Client IP</td>
+                                        <td style="color:var(--status-success);"><i class="fas fa-check"></i> Full Access</td>
+                                        <td style="color:var(--status-success);"><i class="fas fa-check"></i> Full Access</td>
+                                        <td style="color:var(--status-danger);"><i class="fas fa-xmark"></i> Denied</td>
+                                        <td style="color:var(--status-success);"><i class="fas fa-check"></i> Auto-Enforce</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Export Forensic Reports</td>
+                                        <td style="color:var(--status-success);"><i class="fas fa-check"></i> Full Access</td>
+                                        <td style="color:var(--status-success);"><i class="fas fa-check"></i> Full Access</td>
+                                        <td style="color:var(--status-success);"><i class="fas fa-check"></i> Full Access</td>
+                                        <td style="color:var(--status-success);"><i class="fas fa-check"></i> Auto-Generate</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ===================================================================
+                     AUDIT LOGS (IMMUTABLE LOG EXPLORER)
+                     =================================================================== -->
+                <section id="pageAudit" class="workspace-page">
+                    <div class="page-header-ribbon">
+                        <div>
+                            <h2><i class="fas fa-receipt" style="color: var(--primary);"></i> Immutable Security Audit Trail</h2>
+                            <p>Cryptographically verifiable ledger of autonomous remediations, analyst actions, and policy updates</p>
+                        </div>
+                        <div style="display: flex; gap: 10px;">
+                            <button class="btn btn-secondary" onclick="loadAuditLogsTable()">
+                                <i class="fas fa-sync-alt"></i> Refresh Ledger
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="soc-card">
+                        <div class="soc-card-header">
+                            <h3><i class="fas fa-shield-check" style="color: var(--status-success);"></i> Signed Security Operations Ledger</h3>
+                            <span class="badge badge-success"><i class="fas fa-lock"></i> IMMUTABLE WAL ACTIVE</span>
+                        </div>
+                        <div class="soc-table-wrapper">
+                            <table class="soc-table">
+                                <thead>
+                                    <tr>
+                                        <th>Timestamp</th>
+                                        <th>Actor Entity</th>
+                                        <th>Action Taken</th>
+                                        <th>Target Scope</th>
+                                        <th>Enforcement Status</th>
+                                        <th>Cryptographic Signature</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="auditLogsTableBody">
+                                    <tr>
+                                        <td><span class="font-mono">2026-11-01 05:40:12</span></td>
+                                        <td><strong style="color:var(--accent-cyan);">AUTONOMOUS_SENTINEL</strong></td>
+                                        <td>AST Patch Application: SQL Injection Sanitation</td>
+                                        <td><code>shopsphere/api.py:L142</code></td>
+                                        <td><span class="badge badge-success">VERIFIED 200</span></td>
+                                        <td><code>sha256:7b91a0f4...c32d</code></td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="font-mono">2026-11-01 05:38:44</span></td>
+                                        <td><strong style="color:var(--status-warning);">SOAR_QUARANTINE</strong></td>
+                                        <td>Dynamic Perimeter IP Block (403)</td>
+                                        <td><code>IP: 198.51.100.42</code></td>
+                                        <td><span class="badge badge-danger">BLOCKED</span></td>
+                                        <td><code>sha256:4f82bc91...11ae</code></td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="font-mono">2026-11-01 05:35:10</span></td>
+                                        <td><strong style="color:var(--text-primary);">SOC_LEAD_ADMIN</strong></td>
+                                        <td>Security Baseline Check &amp; Posture Verification</td>
+                                        <td><code>Enterprise Sandbox</code></td>
+                                        <td><span class="badge badge-success">GRADE A</span></td>
+                                        <td><code>sha256:1a84ec02...890f</code></td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="font-mono">2026-11-01 05:30:00</span></td>
+                                        <td><strong style="color:var(--accent-cyan);">AUTONOMOUS_SENTINEL</strong></td>
+                                        <td>Engine Startup &amp; Nominal Traffic Calibration</td>
+                                        <td><code>FastAPI Service :8000</code></td>
+                                        <td><span class="badge badge-info">INITIALIZED</span></td>
+                                        <td><code>sha256:0d28fa4e...56bb</code></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ===================================================================
+                     SYSTEM HEALTH & ENGINE DIAGNOSTICS
+                     =================================================================== -->
+                <section id="pageHealth" class="workspace-page">
+                    <div class="page-header-ribbon">
+                        <div>
+                            <h2><i class="fas fa-heartbeat" style="color: var(--primary);"></i> System Health &amp; Subsystem Diagnostics</h2>
+                            <p>Real-time daemon heartbeats, memory allocation, SQLite WAL metrics, and API latency</p>
+                        </div>
+                        <div style="display: flex; gap: 10px;">
+                            <button class="btn btn-secondary" onclick="pingAllServices()">
+                                <i class="fas fa-sync-alt"></i> Run Diagnostics
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Subsystems Health Grid -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin-bottom: 20px;">
+                        <div class="soc-card" style="margin-bottom: 0;">
+                            <div class="soc-card-header">
+                                <h3><i class="fas fa-server" style="color: var(--accent-cyan);"></i> Primary API Daemon</h3>
+                                <span class="badge badge-success">HEALTHY</span>
+                            </div>
+                            <div class="soc-card-body">
+                                <div style="font-size: 11px; color: var(--text-secondary); line-height: 1.8;">
+                                    <div>Service: <strong>FastAPI / Starlette Engine</strong></div>
+                                    <div>Port Binding: <code>http://127.0.0.1:8000</code></div>
+                                    <div>Response Latency: <strong style="color:var(--status-success); font-family:var(--font-mono);">&lt; 2ms</strong></div>
+                                    <div>Uptime: <span style="color:var(--status-success);">Operational</span></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="soc-card" style="margin-bottom: 0;">
+                            <div class="soc-card-header">
+                                <h3><i class="fas fa-shield-virus" style="color: var(--status-success);"></i> AppSec Protection Middleware</h3>
+                                <span class="badge badge-success">ENFORCING</span>
+                            </div>
+                            <div class="soc-card-body">
+                                <div style="font-size: 11px; color: var(--text-secondary); line-height: 1.8;">
+                                    <div>Pipeline: <strong>Rate Limiter + Quarantiner</strong></div>
+                                    <div>Active Quarantines: <strong id="healthActiveBlocks" style="font-family:var(--font-mono);">0</strong></div>
+                                    <div>Filter Drop Rate: <strong style="color:var(--status-success); font-family:var(--font-mono);">0.00%</strong></div>
+                                    <div>Security Engine: <span style="color:var(--status-success);">Dual-Probe Enabled</span></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="soc-card" style="margin-bottom: 0;">
+                            <div class="soc-card-header">
+                                <h3><i class="fas fa-database" style="color: var(--accent-purple);"></i> SQLite Transactional WAL DB</h3>
+                                <span class="badge badge-success">WAL MODE</span>
+                            </div>
+                            <div class="soc-card-body">
+                                <div style="font-size: 11px; color: var(--text-secondary); line-height: 1.8;">
+                                    <div>Database: <code>shopsphere.db</code></div>
+                                    <div>Journal Mode: <strong>Write-Ahead Logging</strong></div>
+                                    <div>Integrity Check: <strong style="color:var(--status-success);">PRAGMA quick_check OK</strong></div>
+                                    <div>Lock Contention: <strong style="color:var(--status-success);">0 Deadlocks</strong></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="soc-card" style="margin-bottom: 0;">
+                            <div class="soc-card-header">
+                                <h3><i class="fas fa-satellite-dish" style="color: var(--status-warning);"></i> Real-Time SSE Event Broker</h3>
+                                <span class="badge badge-success">STREAMING</span>
+                            </div>
+                            <div class="soc-card-body">
+                                <div style="font-size: 11px; color: var(--text-secondary); line-height: 1.8;">
+                                    <div>Channel: <code>/api/security/attack-center/stream</code></div>
+                                    <div>Protocol: <strong>Server-Sent Events (SSE)</strong></div>
+                                    <div>Broadcast Latency: <strong style="color:var(--status-success); font-family:var(--font-mono);">&lt; 1ms</strong></div>
+                                    <div>Subscriber Buffer: <span style="color:var(--status-success);">Healthy (Non-blocking)</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
             </main>
         </div>
     </div>
@@ -1048,9 +1840,9 @@
                 <span class="cmd-shortcut-chip">ESC</span>
             </div>
             <div class="cmd-palette-results" id="cmdPaletteResults">
-                <div class="cmd-group-title">Workspaces &amp; Navigation</div>
+                <div class="cmd-group-title">Overview &amp; Threat Operations</div>
                 <div class="cmd-result-item" onclick="switchToTab('pageOverview'); toggleCommandPalette(false);">
-                    <span><i class="fas fa-chart-pie"></i> Overview Dashboard</span>
+                    <span><i class="fas fa-chart-pie"></i> SOC Overview</span>
                     <span class="cmd-shortcut-chip">1</span>
                 </div>
                 <div class="cmd-result-item" onclick="switchToTab('pageEvents'); toggleCommandPalette(false);">
@@ -1058,20 +1850,64 @@
                     <span class="cmd-shortcut-chip">2</span>
                 </div>
                 <div class="cmd-result-item" onclick="switchToTab('pageAttackCenter'); toggleCommandPalette(false);">
-                    <span><i class="fas fa-crosshairs"></i> Attack Simulation</span>
+                    <span><i class="fas fa-crosshairs"></i> Attack Simulator</span>
                     <span class="cmd-shortcut-chip">3</span>
                 </div>
-                <div class="cmd-result-item" onclick="switchToTab('pageIncidents'); toggleCommandPalette(false);">
-                    <span><i class="fas fa-shield-virus"></i> Incident Command</span>
+                <div class="cmd-result-item" onclick="switchToTab('pageEventsTable'); toggleCommandPalette(false);">
+                    <span><i class="fas fa-list-ul"></i> Security Events Explorer</span>
                     <span class="cmd-shortcut-chip">4</span>
+                </div>
+                <div class="cmd-result-item" onclick="switchToTab('pageThreatIntel'); toggleCommandPalette(false);">
+                    <span><i class="fas fa-brain"></i> Threat Intelligence</span>
+                    <span class="cmd-shortcut-chip">5</span>
+                </div>
+                <div class="cmd-result-item" onclick="switchToTab('pageMitre'); toggleCommandPalette(false);">
+                    <span><i class="fas fa-th"></i> MITRE ATT&amp;CK Matrix</span>
+                    <span class="cmd-shortcut-chip">6</span>
+                </div>
+
+                <div class="cmd-group-title">Incident Response &amp; Assets</div>
+                <div class="cmd-result-item" onclick="switchToTab('pageIncidents'); toggleCommandPalette(false);">
+                    <span><i class="fas fa-shield-virus"></i> Incident Center</span>
+                    <span class="cmd-shortcut-chip">7</span>
+                </div>
+                <div class="cmd-result-item" onclick="switchToTab('pageInvestigation'); toggleCommandPalette(false);">
+                    <span><i class="fas fa-microscope"></i> Incident Investigation</span>
+                    <span class="cmd-shortcut-chip">8</span>
+                </div>
+                <div class="cmd-result-item" onclick="switchToTab('pageSoar'); toggleCommandPalette(false);">
+                    <span><i class="fas fa-robot"></i> SOAR Automation</span>
+                    <span class="cmd-shortcut-chip">9</span>
                 </div>
                 <div class="cmd-result-item" onclick="switchToTab('pageHealing'); toggleCommandPalette(false);">
                     <span><i class="fas fa-hand-holding-medical"></i> Self-Healing Center</span>
-                    <span class="cmd-shortcut-chip">5</span>
+                    <span class="cmd-shortcut-chip">0</span>
                 </div>
                 <div class="cmd-result-item" onclick="switchToTab('pageTopology'); toggleCommandPalette(false);">
-                    <span><i class="fas fa-network-wired"></i> Asset Topology Map</span>
-                    <span class="cmd-shortcut-chip">6</span>
+                    <span><i class="fas fa-network-wired"></i> Asset Explorer (3D/2D)</span>
+                </div>
+                <div class="cmd-result-item" onclick="switchToTab('pagePosture'); toggleCommandPalette(false);">
+                    <span><i class="fas fa-shield-halved"></i> Security Posture</span>
+                </div>
+
+                <div class="cmd-group-title">Analytics &amp; Administration</div>
+                <div class="cmd-result-item" onclick="switchToTab('pageReports'); toggleCommandPalette(false);">
+                    <span><i class="fas fa-file-invoice"></i> Reports</span>
+                </div>
+                <div class="cmd-result-item" onclick="switchToTab('pageAnalytics'); toggleCommandPalette(false);">
+                    <span><i class="fas fa-chart-line"></i> Security Analytics</span>
+                </div>
+                <div class="cmd-result-item" onclick="switchToTab('pageUsers'); toggleCommandPalette(false);">
+                    <span><i class="fas fa-users-cog"></i> Users and Roles</span>
+                </div>
+                <div class="cmd-result-item" onclick="switchToTab('pageAudit'); toggleCommandPalette(false);">
+                    <span><i class="fas fa-receipt"></i> Audit Logs</span>
+                </div>
+                <div class="cmd-result-item" onclick="switchToTab('pageHealth'); toggleCommandPalette(false);">
+                    <span><i class="fas fa-heartbeat"></i> System Health</span>
+                </div>
+                <div class="cmd-result-item" onclick="switchToTab('pageSettings'); toggleCommandPalette(false);">
+                    <span><i class="fas fa-sliders-h"></i> Settings</span>
                 </div>
 
                 <div class="cmd-group-title">Quick Actions</div>
@@ -1083,6 +1919,9 @@
                 </div>
                 <div class="cmd-result-item" onclick="exportEventsCSV(); toggleCommandPalette(false);">
                     <span><i class="fas fa-file-csv" style="color: var(--accent-cyan);"></i> Export Live Telemetry to CSV</span>
+                </div>
+                <div class="cmd-result-item" onclick="toggleContrastTheme(); toggleCommandPalette(false);">
+                    <span><i class="fas fa-circle-half-stroke" style="color: var(--accent-purple);"></i> Toggle High-Contrast Mode</span>
                 </div>
             </div>
         </div>
@@ -1103,6 +1942,37 @@
             <!-- Populated dynamically -->
         </div>
     </aside>
+
+    <!-- ===================================================================
+         5. ACCESSIBLE SESSION LOGOUT CONFIRMATION MODAL
+         =================================================================== -->
+    <div class="modal-backdrop" id="logoutConfirmModal" role="dialog" aria-modal="true" aria-labelledby="logoutModalTitle" onclick="if(event.target === this) closeLogoutModal()">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <h3 id="logoutModalTitle"><i class="fas fa-arrow-right-from-bracket" style="color:var(--status-danger);"></i> Terminate SOC Session?</h3>
+                <button class="btn btn-ghost btn-sm" onclick="closeLogoutModal()" aria-label="Close dialog">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p style="margin-bottom: 10px;">Are you sure you want to terminate your current security operations session? Your active telemetry stream subscriptions will be closed gracefully.</p>
+                <div style="background:var(--bg-card-subtle); border:1px solid var(--border-panel); border-radius:var(--radius-sm); padding:10px; font-size:11px; font-family:var(--font-mono);">
+                    <div>Current Operator: <strong style="color:var(--accent-cyan);">admin@sentinel.sec</strong></div>
+                    <div>Session Role: <strong style="color:var(--status-success);">SOC Lead (Tier 3)</strong></div>
+                    <div>Target Environment: <strong>Local Enterprise Sandbox</strong></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeLogoutModal()">Cancel</button>
+                <button class="btn btn-danger" onclick="confirmLogout()">
+                    <i class="fas fa-power-off"></i> Confirm Logout
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Accessible Screen Reader Announcements -->
+    <div id="srAnnouncements" class="sr-only" aria-live="polite" aria-atomic="true"></div>
 
     <!-- Dependencies -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
