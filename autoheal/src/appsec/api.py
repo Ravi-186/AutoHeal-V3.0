@@ -10,7 +10,10 @@ import json
 from src.appsec.models import (
     get_security_events, list_security_incidents,
     get_security_incident, update_incident_status,
-    get_active_blocked_clients, unblock_client_ip
+    get_active_blocked_clients, unblock_client_ip,
+    get_security_event_by_id, get_related_security_events,
+    query_security_events_advanced, record_event_investigation,
+    get_threat_intel, get_detection_rule_catalog
 )
 from src.appsec.detector import AppSecDetector
 from src.appsec.responder import AppSecResponder
@@ -26,6 +29,14 @@ class UnblockRequest(BaseModel):
 class RemediateRequest(BaseModel):
     remediation_notes: str
     mark_as_remediated: bool = True
+
+
+class InvestigationRequest(BaseModel):
+    status: str = "INVESTIGATING"
+    notes: str = ""
+    assigned_analyst: str = "admin@sentinel.sec"
+    tags: Optional[List[str]] = None
+    create_incident: bool = False
 
 
 @router.get("/metrics", summary="Retrieve Live Application Security KPIs")
@@ -105,13 +116,121 @@ async def stream_live_events(request: Request):
 
 @router.get("/events", summary="List Telemetry Security Events")
 def list_events(
+    page: int = Query(1, ge=1),
+    limit: int = Query(25, ge=1, le=500),
+    search: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
     event_type: Optional[str] = Query(None),
     severity: Optional[str] = Query(None),
+    rule_id: Optional[str] = Query(None),
     client_ip: Optional[str] = Query(None),
-    limit: int = Query(50, le=200)
+    action_taken: Optional[str] = Query(None),
+    time_range: Optional[str] = Query(None),
+    start_time: Optional[str] = Query(None),
+    end_time: Optional[str] = Query(None),
+    sort_by: str = Query("timestamp"),
+    sort_order: str = Query("desc"),
+    format: Optional[str] = Query(None)
 ):
-    """Retrieves immutable security request logs and telemetry events."""
-    return get_security_events(limit=limit, event_type=event_type, severity=severity, client_ip=client_ip)
+    """Retrieves paginated, searchable, multi-filtered telemetry events with aggregate breakdowns and CSV export."""
+    effective_category = category or event_type
+    res = query_security_events_advanced(
+        page=page,
+        limit=limit,
+        search=search,
+        category=effective_category,
+        severity=severity,
+        rule_id=rule_id,
+        client_ip=client_ip,
+        action_taken=action_taken,
+        time_range=time_range,
+        start_time=start_time,
+        end_time=end_time,
+        sort_by=sort_by,
+        sort_order=sort_order
+    )
+
+    if format == "csv":
+        import io
+        import csv
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["Timestamp", "Event ID", "Severity", "Event Type", "Method", "Path", "Status Code", "Client IP", "Action Taken", "Correlation ID"])
+        for ev in res["events"]:
+            writer.writerow([
+                ev.get("timestamp"),
+                ev.get("event_id"),
+                ev.get("severity"),
+                ev.get("event_type"),
+                ev.get("method"),
+                ev.get("path"),
+                ev.get("status_code"),
+                ev.get("client_ip"),
+                ev.get("action_taken"),
+                ev.get("correlation_id")
+            ])
+        csv_bytes = output.getvalue().encode("utf-8")
+        return Response(
+            content=csv_bytes,
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=sentinel_events_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"}
+        )
+
+    return res
+
+
+@router.get("/events/{event_id}", summary="Get Event Dossier")
+def get_event_detail(event_id: str):
+    """Retrieves complete structured telemetry event, investigation status, detection rule, and related incident."""
+    ev = get_security_event_by_id(event_id)
+    if not ev:
+        raise HTTPException(status_code=404, detail=f"Security event {event_id} not found.")
+    return ev
+
+
+@router.get("/events/{event_id}/related", summary="Get Related Security Events")
+def get_related_events(event_id: str, limit: int = Query(15, ge=1, le=50)):
+    """Retrieves correlated security events matching trace ID, client IP, or target resource."""
+    ev = get_security_event_by_id(event_id)
+    if not ev:
+        raise HTTPException(status_code=404, detail=f"Security event {event_id} not found.")
+    return {
+        "event_id": event_id,
+        "related_events": get_related_security_events(event_id, limit=limit)
+    }
+
+
+@router.post("/events/{event_id}/investigate", summary="Update Event Investigation Status & Notes")
+def update_event_investigation(event_id: str, payload: InvestigationRequest):
+    """Updates investigation status, notes, tags, and optionally escalates to formal incident."""
+    try:
+        updated = record_event_investigation(
+            event_id=event_id,
+            status=payload.status,
+            notes=payload.notes,
+            assigned_analyst=payload.assigned_analyst,
+            tags=payload.tags,
+            create_incident=payload.create_incident
+        )
+        return updated
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/threat-intel/enrich", summary="Enrich Client IP with Threat Intelligence")
+def threat_intel_enrichment(ip: str = Query(..., description="Client IP to inspect")):
+    """Enriches client IP with autonomous blocklist state, reputation score, and behavioral tags."""
+    return get_threat_intel(ip)
+
+
+@router.get("/rules/catalog", summary="Retrieve Detection Rule Catalog")
+def get_rules_catalog():
+    """Returns detection rule catalog with live telemetry event counts, incident counts, and MITRE mapping."""
+    return {
+        "rules": get_detection_rule_catalog(),
+        "total_rules": 7,
+        "active_rules": 7
+    }
 
 
 @router.get("/incidents", summary="List Security Incidents")

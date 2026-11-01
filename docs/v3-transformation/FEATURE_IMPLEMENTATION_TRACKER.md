@@ -15,7 +15,7 @@
 | **PHASE 0** | Workspace Discovery & Baseline | Technology stack audit, route discovery, architecture plan | **COMPLETE** | `INITIAL_UI_UX_AUDIT.md`, `FRONTEND_ARCHITECTURE.md` |
 | **PHASE 1** | Design System & Global Layout | "Obsidian Sentinel" visual identity, 18-module navigation shell, topbar, WCAG 2.2 AA component library | **COMPLETE** | `DESIGN_SYSTEM_IMPLEMENTATION.md`, `GLOBAL_APPLICATION_SHELL.md`, `COMPONENT_LIBRARY.md`, `RESPONSIVE_LAYOUT_REPORT.md`, `ACCESSIBILITY_VALIDATION.md`, `PHASE_1_TEST_RESULTS.md` |
 | **PHASE 2** | Executive SOC Command Center | Real-time 8 KPI cards, timeline, severity donut, 7-stage pipeline, detection matrix, dual-probe healing, live SSE feed, 8-subsystem health | **COMPLETE** | `docs/v3-transformation/phase-2/` (`EXECUTIVE_DASHBOARD_DESIGN.md`, `DASHBOARD_API_INTEGRATION.md`, `KPI_DEFINITIONS.md`, `ANALYTICS_IMPLEMENTATION.md`, `REALTIME_ACTIVITY_IMPLEMENTATION.md`, `DASHBOARD_PERFORMANCE_REPORT.md`, `PHASE_2_TEST_RESULTS.md`) |
-| **PHASE 3** | Live Threat Center | Real-time event explorer, multi-filter, search, detail drawer | **COMPLETE** | Side-over Drawer, `/api/security/events`, CSV Export |
+| **PHASE 3** | Live Threat Center | Enterprise real-time Threat Center, 5 KPI cards, 7-rule catalog bar, 5-tab forensic inspector drawer, SSE stream, 3-tier correlation, threat intel enrichment, investigation workflow | **COMPLETE** | `docs/v3-transformation/phase-3/` (`LIVE_THREAT_CENTER_DESIGN.md`, `EVENT_EXPLORER_IMPLEMENTATION.md`, `EVENT_STREAM_ARCHITECTURE.md`, `DETECTION_RULE_EXPLORER.md`, `EVENT_CORRELATION_DESIGN.md`, `THREAT_INTELLIGENCE_INTEGRATION.md`, `SECURITY_REVIEW.md`, `PHASE_3_TEST_RESULTS.md`) |
 | **PHASE 4** | Attack Simulation Center | Scenarios, risk labels, dry-run, SSE timeline, verification evidence | **COMPLETE** | Live SSE `/api/security/attack-center/stream` |
 | **PHASE 5** | Incident Command Center | Forensic dossier, attack timeline, root-cause, response history | **COMPLETE** | Dossier View, `/api/security/incidents/{id}` |
 | **PHASE 6** | SOAR Automation Center | Playbook library, visual execution flow, action status, approval gates| **COMPLETE** | Visual Flowchart, Active Quarantine Manager |
@@ -81,12 +81,25 @@
 - [x] Comprehensive Automated Test Suite (`tests/test_executive_dashboard.py` 8/8 passed, 88/88 total suite pass) — *Verified*
 - [x] Complete Phase 2 Documentation Suite in `docs/v3-transformation/phase-2/` (7 documents) — *Verified*
 
-### Module 3: Live Threat Center (Phase 3)
-- [x] Real-time event explorer table with sorting and pagination — *Verified*
-- [x] Severity filters (Critical, High, Medium, Low, Info) — *Verified*
-- [x] Event category & IP search input (`filterEventsTable()`) — *Verified*
-- [x] Event detail slide-over drawer with raw JSON inspection (`#eventDetailDrawer`) — *Verified*
-- [x] Export to CSV (`exportEventsCSV()`) — *Verified*
+### Module 3: Live Threat Center, Security Event Explorer & Threat Investigation (Phase 3)
+- [x] Dedicated Threat Center Header with live status badge, last event timestamp, total events count, active detections count, critical event count, refresh controls, and time-range filter (`1h`, `24h`, `7d`, `30d`, `all`) — *Verified in index.html & script.js*
+- [x] Immutable 4-State Live Monitoring Indicator (`CONNECTED`, `RECONNECTING`, `DEGRADED`, `DISCONNECTED`) with zero false "LIVE" claims — *Verified*
+- [x] Real-time SSE event stream (`/api/security/events/stream`) with 3s ping keepalives, duplicate event protection, and bounded 30-item buffer — *Verified*
+- [x] Automatic 5-second polling fallback if SSE drops or disconnects — *Verified*
+- [x] Interactive Detection Rule Catalog Ribbon for all 7 rules (`INJ-001`, `XSS-001`, `AUTH-001`, `AUTH-002`, `RATE-001`, `CORR-001`, `HEALTH-001`) with real-time event/incident counts and click-to-filter — *Verified on `/api/security/rules/catalog`*
+- [x] Advanced Security Event Explorer Table with server-side pagination, multi-column search, severity filtering, category filtering, action filtering, source IP filtering, and column sorting — *Verified on `/api/security/events`*
+- [x] 640px 5-Tab Forensic Event Detail Inspector Side-Over Drawer (`#eventDetailDrawer`):
+  - [x] Tab 1: Overview (Request metadata, client IP, action taken, autonomous quarantine trigger, linked incident jump) — *Verified*
+  - [x] Tab 2: Evidence (Matched attack pattern, target URI/path, query string, parameters, heuristic explanation) — *Verified*
+  - [x] Tab 3: Detection Analysis (Rule ID, MITRE ATT&CK technique/tactic, confidence gauge, detection logic) — *Verified*
+  - [x] Tab 4: Related Events & Correlation (3-tier correlation: Confirmed trace ID, Common source IP ±1h, Target endpoint proximity ±30m) — *Verified on `/api/security/events/{id}/related`*
+  - [x] Tab 5: Raw Event (Pretty-printed, syntax-highlighted, unexecuted, safely escaped JSON with copy-to-clipboard) — *Verified*
+- [x] Threat Intelligence Enrichment (`/api/security/threat-intel/enrich?ip={ip}`) with reputation scoring (0-100), classification, ASN/country, autonomous quarantine status, and behavioral tags — *Verified*
+- [x] Analyst Investigation Workflow with status persistence (`UNREVIEWED`, `INVESTIGATING`, `CONFIRMED_THREAT`, `FALSE_POSITIVE`, `CONTAINED`), analyst notes, incident escalation, and IP quarantine — *Verified on `event_investigations` table*
+- [x] Enterprise Security & Audit Logging: Universal `escapeHtml()` sanitization across all table and drawer elements, zero executable JSON, and immutable trail in `admin_audit_logs` — *Verified*
+- [x] CSV and JSON Data Export triggers streaming up to 1,000 records with formula injection sanitization — *Verified*
+- [x] Automated Test Suite (`tests/test_live_threat_center.py` 11/11 passed, 99/99 total regression suite pass) — *Verified*
+- [x] Complete Phase 3 Documentation Suite in `docs/v3-transformation/phase-3/` (8 documents) — *Verified*
 
 ### Module 4: Attack Simulation Center (Phase 4)
 - [x] Scenario cards (SQLi, XSS, Credential Stuffing, DoS, Admin Probe, Health Degradation) — *Verified*

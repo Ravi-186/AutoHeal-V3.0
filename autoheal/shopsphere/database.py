@@ -286,10 +286,29 @@ def init_db():
         except Exception:
             pass
 
+        # 13. Security Event Investigations Table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS event_investigations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id TEXT UNIQUE NOT NULL,
+            status TEXT NOT NULL DEFAULT 'NEW',
+            assigned_analyst TEXT DEFAULT 'admin@sentinel.sec',
+            notes TEXT DEFAULT '',
+            incident_id TEXT,
+            tags_json TEXT DEFAULT '[]',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+
         # Enterprise Database Performance Indexes
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_blocked_clients_ip_active ON blocked_clients (client_ip, is_active, expires_at);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_security_events_temporal ON security_events (client_ip, timestamp);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_security_events_type_time ON security_events (event_type, timestamp);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_security_events_sev_time ON security_events (severity, timestamp DESC);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_security_events_corr ON security_events (correlation_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_event_investigations_event ON event_investigations (event_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_event_investigations_status ON event_investigations (status);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_security_incidents_status ON security_incidents (status, severity, created_at DESC);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_orders_customer_email ON orders (customer_email, created_at DESC);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_cart_items_user ON cart_items (user_or_session_id);")

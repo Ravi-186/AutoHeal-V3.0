@@ -119,6 +119,624 @@ def get_security_events(
         return events
 
 
+# --- Live Threat Center & Event Forensics Engine (Phase 3) ---
+
+RULE_METADATA: Dict[str, Dict[str, Any]] = {
+    "INJ-001": {
+        "rule_id": "INJ-001",
+        "rule_name": "SQL Injection Attack",
+        "description": "Inspects query strings, parameters, and bodies for union-based, boolean-based, or stacked SQL injection patterns.",
+        "category": "Injection",
+        "severity": "CRITICAL",
+        "mitre_technique_id": "T1190",
+        "mitre_tactic": "Initial Access (TA0001)",
+        "mitre_name": "Exploit Public-Facing Application: SQL Injection",
+        "detection_logic": "Regex inspection for SQL syntax fragments like UNION SELECT, OR 1=1, stacked query delimiters, and hex comments."
+    },
+    "AUTH-001": {
+        "rule_id": "AUTH-001",
+        "rule_name": "Credential Stuffing / Brute Force",
+        "description": "Detects rapid sequential failed login attempts from a common client IP or against targeted user identities.",
+        "category": "Credential Access",
+        "severity": "HIGH",
+        "mitre_technique_id": "T1110.001",
+        "mitre_tactic": "Credential Access (TA0006)",
+        "mitre_name": "Brute Force: Password Guessing",
+        "detection_logic": "Sliding-window threshold of >3 consecutive failed login events within a 60-second window."
+    },
+    "XSS-001": {
+        "rule_id": "XSS-001",
+        "rule_name": "Cross-Site Scripting (XSS)",
+        "description": "Identifies reflected or stored cross-site scripting vectors containing script tags, event handlers, or JavaScript pseudo-protocols.",
+        "category": "Client-Side Execution",
+        "severity": "HIGH",
+        "mitre_technique_id": "T1059.007",
+        "mitre_tactic": "Execution (TA0002)",
+        "mitre_name": "Command and Scripting Interpreter: JavaScript",
+        "detection_logic": "Pattern matching on HTML tags (<script>, <img>, <iframe>) with executable attributes (onload, onerror) or javascript: URIs."
+    },
+    "AUTH-002": {
+        "rule_id": "AUTH-002",
+        "rule_name": "Unauthorized Admin Access Probe",
+        "description": "Flags requests directed towards privileged administrative management paths without valid cryptographic session tokens.",
+        "category": "Privilege Escalation",
+        "severity": "HIGH",
+        "mitre_technique_id": "T1078",
+        "mitre_tactic": "Defense Evasion (TA0005)",
+        "mitre_name": "Valid Accounts: Default Accounts",
+        "detection_logic": "Path inspection for /admin endpoints combined with token validation checking for admin role authorization."
+    },
+    "RATE-001": {
+        "rule_id": "RATE-001",
+        "rule_name": "Request-Rate Anomaly / Scraping",
+        "description": "Monitors high-frequency volumetric request bursts exceeding standard shopping workflow rate limits.",
+        "category": "Denial of Service",
+        "severity": "MEDIUM",
+        "mitre_technique_id": "T1499",
+        "mitre_tactic": "Impact (TA0040)",
+        "mitre_name": "Endpoint Denial of Service",
+        "detection_logic": "Sliding-window request velocity tracking triggering when a single client IP exceeds 15 requests per 5-second interval."
+    },
+    "CORR-001": {
+        "rule_id": "CORR-001",
+        "rule_name": "Multi-Step Attack Correlation",
+        "description": "Correlates multi-phase adversarial kill-chains combining reconnaissance, injection, and privilege escalation.",
+        "category": "Advanced Persistent Threat",
+        "severity": "CRITICAL",
+        "mitre_technique_id": "T1190/T1078",
+        "mitre_tactic": "Multiple Tactics",
+        "mitre_name": "Combined Multi-Step Kill-Chain",
+        "detection_logic": "Complex correlation heuristic linking diverse attack categories from identical source IP or correlation context."
+    },
+    "HEALTH-001": {
+        "rule_id": "HEALTH-001",
+        "rule_name": "Clustered Service Exception Degradation",
+        "description": "Detects clustered application error bursts (HTTP 500) indicating potential zero-day exploitation or system failure.",
+        "category": "System Reliability",
+        "severity": "HIGH",
+        "mitre_technique_id": "T1499.004",
+        "mitre_tactic": "Impact (TA0040)",
+        "mitre_name": "Application Exploitation Degradation",
+        "detection_logic": "Threshold evaluation on unhandled 5xx server exceptions exceeding 5 errors within a 60-second window."
+    }
+}
+
+
+def map_event_to_rule_id(event_type: str, details: Optional[Dict[str, Any]] = None) -> Optional[str]:
+    """Resolves event type or details payload to its detection rule identifier."""
+    if details and details.get("rule_id"):
+        return details["rule_id"]
+    t = (event_type or "").upper()
+    if "INJ-001" in t or "SQL" in t:
+        return "INJ-001"
+    if "XSS-001" in t or "XSS" in t:
+        return "XSS-001"
+    if "AUTH-002" in t or "ADMIN" in t:
+        return "AUTH-002"
+    if "AUTH_FAILURE" in t or "AUTH-001" in t or "CREDENTIAL" in t or "LOGIN" in t:
+        return "AUTH-001"
+    if "RATE_LIMIT" in t or "RATE-001" in t or "SURGE" in t:
+        return "RATE-001"
+    if "HEALTH" in t or "EXCEPTION" in t:
+        return "HEALTH-001"
+    if "CORR" in t:
+        return "CORR-001"
+    return None
+
+
+def get_security_event_by_id(event_id: str) -> Optional[Dict[str, Any]]:
+    """Retrieves full structured telemetry event, investigation status, detection rule, and related incident."""
+    init_db()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM security_events WHERE event_id = ? OR id = ?", (event_id, event_id))
+        row = cursor.fetchone()
+        if not row:
+            return None
+        ev = dict(row)
+        details = {}
+        if ev.get("details_json"):
+            try:
+                details = json.loads(ev["details_json"])
+            except Exception:
+                details = {}
+        ev["details"] = details
+
+        # Investigation state
+        cursor.execute("SELECT * FROM event_investigations WHERE event_id = ?", (ev["event_id"],))
+        inv_row = cursor.fetchone()
+        if inv_row:
+            inv = dict(inv_row)
+            ev["investigation"] = {
+                "status": inv.get("status", "NEW"),
+                "assigned_analyst": inv.get("assigned_analyst", "admin@sentinel.sec"),
+                "notes": inv.get("notes", ""),
+                "incident_id": inv.get("incident_id"),
+                "tags": json.loads(inv.get("tags_json") or "[]"),
+                "updated_at": inv.get("updated_at")
+            }
+        else:
+            ev["investigation"] = {
+                "status": "NEW",
+                "assigned_analyst": "admin@sentinel.sec",
+                "notes": "",
+                "incident_id": None,
+                "tags": [],
+                "updated_at": ev.get("timestamp")
+            }
+
+        # Rule resolution
+        rule_id = map_event_to_rule_id(ev.get("event_type", ""), details)
+        ev["rule_id"] = rule_id
+        if rule_id and rule_id in RULE_METADATA:
+            ev["detection_rule"] = RULE_METADATA[rule_id]
+        else:
+            ev["detection_rule"] = None
+
+        # Related incident resolution
+        incident_id = ev["investigation"]["incident_id"]
+        if not incident_id and ev.get("client_ip"):
+            cursor.execute(
+                "SELECT incident_id, title, status, severity, created_at FROM security_incidents WHERE source_ip = ? ORDER BY id DESC LIMIT 1",
+                (ev["client_ip"],)
+            )
+            inc_match = cursor.fetchone()
+            ev["related_incident"] = dict(inc_match) if inc_match else None
+        elif incident_id:
+            cursor.execute(
+                "SELECT incident_id, title, status, severity, created_at FROM security_incidents WHERE incident_id = ?",
+                (incident_id,)
+            )
+            inc_match = cursor.fetchone()
+            ev["related_incident"] = dict(inc_match) if inc_match else None
+        else:
+            ev["related_incident"] = None
+
+        return ev
+
+
+def get_related_security_events(event_id: str, limit: int = 15) -> List[Dict[str, Any]]:
+    """Correlates related security events by cryptographic correlation ID, identical source IP, and target resource proximity."""
+    init_db()
+    ev = get_security_event_by_id(event_id)
+    if not ev:
+        return []
+
+    client_ip = ev.get("client_ip")
+    corr_id = ev.get("correlation_id")
+    target_path = ev.get("path")
+
+    related = []
+    seen_ids = {ev.get("event_id")}
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+
+        # 1. Confirmed relationship: Identical correlation_id
+        if corr_id and corr_id != "corr-none":
+            cursor.execute(
+                "SELECT * FROM security_events WHERE correlation_id = ? AND event_id != ? ORDER BY id DESC LIMIT ?",
+                (corr_id, ev.get("event_id"), limit)
+            )
+            for r in cursor.fetchall():
+                item = dict(r)
+                if item["event_id"] not in seen_ids:
+                    seen_ids.add(item["event_id"])
+                    item["relationship_type"] = "CONFIRMED_CORRELATION"
+                    item["relationship_detail"] = f"Shares cryptographic correlation trace ID '{corr_id}'"
+                    related.append(item)
+
+        # 2. Heuristic relationship: Same client IP
+        if client_ip and len(related) < limit:
+            remaining = limit - len(related)
+            cursor.execute(
+                "SELECT * FROM security_events WHERE client_ip = ? AND event_id != ? ORDER BY id DESC LIMIT ?",
+                (client_ip, ev.get("event_id"), remaining)
+            )
+            for r in cursor.fetchall():
+                item = dict(r)
+                if item["event_id"] not in seen_ids:
+                    seen_ids.add(item["event_id"])
+                    item["relationship_type"] = "COMMON_SOURCE_IP"
+                    item["relationship_detail"] = f"Originated from identical client IP ({client_ip})"
+                    related.append(item)
+
+        # 3. Target resource proximity: Same target path with security triggers
+        if target_path and len(related) < limit:
+            remaining = limit - len(related)
+            cursor.execute(
+                "SELECT * FROM security_events WHERE path = ? AND event_id != ? AND severity IN ('CRITICAL', 'HIGH', 'MEDIUM') ORDER BY id DESC LIMIT ?",
+                (target_path, ev.get("event_id"), remaining)
+            )
+            for r in cursor.fetchall():
+                item = dict(r)
+                if item["event_id"] not in seen_ids:
+                    seen_ids.add(item["event_id"])
+                    item["relationship_type"] = "TARGET_ENDPOINT_PROXIMITY"
+                    item["relationship_detail"] = f"Concurrent attack probe directed at {target_path}"
+                    related.append(item)
+
+    for item in related:
+        if item.get("details_json"):
+            try:
+                item["details"] = json.loads(item["details_json"])
+            except Exception:
+                item["details"] = {}
+        item["rule_id"] = map_event_to_rule_id(item.get("event_type", ""), item.get("details"))
+
+    return related
+
+
+def query_security_events_advanced(
+    page: int = 1,
+    limit: int = 25,
+    search: Optional[str] = None,
+    category: Optional[str] = None,
+    severity: Optional[str] = None,
+    rule_id: Optional[str] = None,
+    client_ip: Optional[str] = None,
+    action_taken: Optional[str] = None,
+    time_range: Optional[str] = None,
+    start_time: Optional[str] = None,
+    end_time: Optional[str] = None,
+    sort_by: str = "timestamp",
+    sort_order: str = "desc"
+) -> Dict[str, Any]:
+    """Advanced server-side query with full-text search, multi-field filtering, pagination, and aggregate breakdown."""
+    init_db()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+
+        where_clauses = ["1=1"]
+        params: List[Any] = []
+
+        if search:
+            s = f"%{search.strip()}%"
+            where_clauses.append("(se.event_id LIKE ? OR se.correlation_id LIKE ? OR se.client_ip LIKE ? OR se.path LIKE ? OR se.method LIKE ? OR se.event_type LIKE ? OR se.details_json LIKE ?)")
+            params.extend([s, s, s, s, s, s, s])
+
+        if severity and severity.upper() != "ALL":
+            where_clauses.append("se.severity = ?")
+            params.append(severity.upper())
+
+        if category and category.upper() != "ALL":
+            cat = category.upper()
+            if cat in ("SQL_INJECTION", "INJECTION"):
+                where_clauses.append("(se.event_type LIKE '%INJ%' OR se.details_json LIKE '%Injection%' OR se.details_json LIKE '%injection%')")
+            elif cat in ("XSS", "CROSS_SITE_SCRIPTING"):
+                where_clauses.append("(se.event_type LIKE '%XSS%' OR se.details_json LIKE '%Cross-Site Scripting%' OR se.details_json LIKE '%xss%')")
+            elif cat in ("CREDENTIAL_STUFFING", "AUTH_FAILURE", "CREDENTIAL_ACCESS"):
+                where_clauses.append("(se.event_type LIKE '%AUTH_FAILURE%' OR se.event_type LIKE '%AUTH-001%')")
+            elif cat in ("ADMIN_PATH_TRAVERSAL", "PRIVILEGE_ESCALATION", "AUTH-002"):
+                where_clauses.append("(se.event_type LIKE '%AUTH-002%' OR se.event_type LIKE '%AUTHZ%')")
+            elif cat in ("RATE_LIMIT_EXCEEDED", "DOS"):
+                where_clauses.append("(se.event_type LIKE '%RATE%' OR se.status_code = 429)")
+            elif cat in ("SERVICE_HEALTH_ERROR", "SYSTEM_RELIABILITY"):
+                where_clauses.append("(se.event_type LIKE '%HEALTH%' OR se.event_type LIKE '%EXCEPTION%' OR se.status_code >= 500)")
+            else:
+                where_clauses.append("se.event_type = ?")
+                params.append(category)
+
+        if rule_id and rule_id.upper() != "ALL":
+            r_id = rule_id.upper()
+            where_clauses.append("(se.event_type LIKE ? OR se.details_json LIKE ?)")
+            params.extend([f"%{r_id}%", f"%{r_id}%"])
+
+        if client_ip:
+            where_clauses.append("se.client_ip = ?")
+            params.append(client_ip.strip())
+
+        if action_taken and action_taken.upper() != "ALL":
+            act = action_taken.upper()
+            if "BLOCK" in act or "QUARANTINE" in act:
+                where_clauses.append("(se.action_taken LIKE '%BLOCK%' OR se.action_taken LIKE '%QUARANTINE%' OR se.status_code = 403)")
+            elif "THROTTLE" in act:
+                where_clauses.append("(se.action_taken LIKE '%THROTTLE%' OR se.status_code = 429)")
+            elif "ALLOW" in act:
+                where_clauses.append("(se.action_taken LIKE '%ALLOW%' OR se.status_code = 200)")
+            else:
+                where_clauses.append("se.action_taken = ?")
+                params.append(action_taken)
+
+        # Time range filtering
+        if time_range and time_range.lower() != "all":
+            tr = time_range.lower()
+            hours = 24
+            if tr == "1h":
+                hours = 1
+            elif tr == "24h":
+                hours = 24
+            elif tr == "7d":
+                hours = 24 * 7
+            elif tr == "30d":
+                hours = 24 * 30
+            cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M:%S")
+            where_clauses.append("se.timestamp >= ?")
+            params.append(cutoff)
+        elif start_time and end_time:
+            where_clauses.append("se.timestamp >= ? AND se.timestamp <= ?")
+            params.extend([start_time, end_time])
+
+        where_sql = " AND ".join(where_clauses)
+
+        # Calculate counts per severity for filtered scope
+        summary_query = f"""
+        SELECT 
+            COUNT(*) as total_count,
+            SUM(CASE WHEN se.severity = 'CRITICAL' THEN 1 ELSE 0 END) as critical_count,
+            SUM(CASE WHEN se.severity = 'HIGH' THEN 1 ELSE 0 END) as high_count,
+            SUM(CASE WHEN se.severity = 'MEDIUM' THEN 1 ELSE 0 END) as medium_count,
+            SUM(CASE WHEN se.severity = 'LOW' THEN 1 ELSE 0 END) as low_count,
+            SUM(CASE WHEN se.severity = 'INFO' THEN 1 ELSE 0 END) as info_count,
+            MAX(se.timestamp) as last_event_timestamp
+        FROM security_events se WHERE {where_sql}
+        """
+        cursor.execute(summary_query, params)
+        sum_row = cursor.fetchone()
+        total_records = sum_row[0] if sum_row else 0
+        summary = {
+            "total": total_records or 0,
+            "critical": (sum_row[1] or 0) if sum_row else 0,
+            "high": (sum_row[2] or 0) if sum_row else 0,
+            "medium": (sum_row[3] or 0) if sum_row else 0,
+            "low": (sum_row[4] or 0) if sum_row else 0,
+            "info": (sum_row[5] or 0) if sum_row else 0,
+            "last_event_timestamp": sum_row[6] if sum_row and sum_row[6] else None
+        }
+
+        # Sorting
+        valid_sort_cols = {
+            "timestamp": "se.timestamp",
+            "severity": "CASE se.severity WHEN 'CRITICAL' THEN 1 WHEN 'HIGH' THEN 2 WHEN 'MEDIUM' THEN 3 WHEN 'LOW' THEN 4 ELSE 5 END",
+            "status_code": "se.status_code",
+            "latency_ms": "se.latency_ms",
+            "client_ip": "se.client_ip",
+            "path": "se.path"
+        }
+        order_col = valid_sort_cols.get(sort_by, "se.id")
+        direction = "ASC" if sort_order.lower() == "asc" else "DESC"
+
+        # Pagination
+        limit = max(1, min(limit, 500))
+        offset = max(0, (page - 1) * limit)
+
+        # Main query
+        data_query = f"""
+        SELECT se.*, ei.status as investigation_status, ei.assigned_analyst, ei.notes as investigation_notes
+        FROM security_events se
+        LEFT JOIN event_investigations ei ON se.event_id = ei.event_id
+        WHERE {where_sql}
+        ORDER BY {order_col} {direction}
+        LIMIT ? OFFSET ?
+        """
+        data_params = list(params) + [limit, offset]
+        cursor.execute(data_query, data_params)
+        rows = cursor.fetchall()
+
+        events = []
+        for r in rows:
+            ev = dict(r)
+            if ev.get("details_json"):
+                try:
+                    ev["details"] = json.loads(ev["details_json"])
+                except Exception:
+                    ev["details"] = {}
+            else:
+                ev["details"] = {}
+
+            ev["rule_id"] = map_event_to_rule_id(ev.get("event_type", ""), ev.get("details"))
+            events.append(ev)
+
+        total_pages = max(1, (total_records + limit - 1) // limit) if total_records > 0 else 1
+
+        return {
+            "events": events,
+            "total": total_records,
+            "page": page,
+            "limit": limit,
+            "total_pages": total_pages,
+            "summary": summary
+        }
+
+
+def record_event_investigation(
+    event_id: str,
+    status: str = "INVESTIGATING",
+    notes: str = "",
+    assigned_analyst: str = "admin@sentinel.sec",
+    tags: Optional[List[str]] = None,
+    create_incident: bool = False,
+    admin_email: str = "admin@sentinel.sec"
+) -> Dict[str, Any]:
+    """Persists investigation updates, analyst notes, and optional incident escalation with complete audit trail."""
+    init_db()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT * FROM security_events WHERE event_id = ?", (event_id,))
+        ev_row = cursor.fetchone()
+        if not ev_row:
+            raise ValueError(f"Event {event_id} not found")
+        ev = dict(ev_row)
+
+        incident_id = None
+        if create_incident:
+            cursor.execute("SELECT incident_id FROM event_investigations WHERE event_id = ?", (event_id,))
+            existing_inv = cursor.fetchone()
+            if existing_inv and existing_inv[0]:
+                incident_id = existing_inv[0]
+            else:
+                details = json.loads(ev.get("details_json") or "{}")
+                rule_id = map_event_to_rule_id(ev.get("event_type"), details) or "INJ-001"
+                rule_meta = RULE_METADATA.get(rule_id, RULE_METADATA["INJ-001"])
+                incident_id = create_security_incident(
+                    rule_id=rule_id,
+                    title=f"Escalated from Event {event_id}: {ev.get('event_type')}",
+                    category=rule_meta["category"],
+                    severity=ev.get("severity", "HIGH"),
+                    summary=f"Analyst escalated telemetry event {event_id} ({ev.get('method')} {ev.get('path')}) to formal security incident. Investigation notes: {notes}",
+                    source_ip=ev.get("client_ip", "127.0.0.1"),
+                    evidence={"event_id": event_id, "method": ev.get("method"), "path": ev.get("path"), "details": details},
+                    affected_endpoints=[ev.get("path", "/")],
+                    impact_actual=f"Active HTTP probe detected on {ev.get('path')}",
+                    impact_potential="Potential privilege violation or data exposure",
+                    mitigation_actions=[{"action": "ANALYST_ESCALATION", "timestamp": datetime.now(timezone.utc).isoformat(), "details": notes}],
+                    confidence=0.95,
+                    status="OPEN"
+                )
+
+        tags_str = json.dumps(tags or [])
+        now_ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+        cursor.execute("""
+        INSERT INTO event_investigations (event_id, status, assigned_analyst, notes, incident_id, tags_json, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(event_id) DO UPDATE SET
+            status = excluded.status,
+            assigned_analyst = excluded.assigned_analyst,
+            notes = excluded.notes,
+            incident_id = COALESCE(excluded.incident_id, event_investigations.incident_id),
+            tags_json = excluded.tags_json,
+            updated_at = excluded.updated_at
+        """, (event_id, status.upper(), assigned_analyst, notes, incident_id, tags_str, now_ts))
+
+        cursor.execute("""
+        INSERT INTO admin_audit_logs (admin_email, action, target_entity, details, timestamp)
+        VALUES (?, ?, ?, ?, ?)
+        """, (
+            admin_email,
+            f"EVENT_INVESTIGATION_{status.upper()}",
+            f"security_event:{event_id}",
+            json.dumps({"notes": notes, "assigned_analyst": assigned_analyst, "incident_id": incident_id}),
+            now_ts
+        ))
+
+        conn.commit()
+
+        return {
+            "event_id": event_id,
+            "status": status.upper(),
+            "assigned_analyst": assigned_analyst,
+            "notes": notes,
+            "incident_id": incident_id,
+            "tags": tags or [],
+            "updated_at": now_ts
+        }
+
+
+def get_threat_intel(ip: str) -> Dict[str, Any]:
+    """Inspects IP reputation, autonomous blocklist state, hostile activity history, and threat actor tags."""
+    init_db()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT * FROM blocked_clients WHERE client_ip = ? AND is_active = 1", (ip,))
+        blocked_row = cursor.fetchone()
+        is_blocked = bool(blocked_row)
+
+        cursor.execute("""
+        SELECT 
+            COUNT(*) as total_events,
+            SUM(CASE WHEN severity IN ('CRITICAL', 'HIGH') THEN 1 ELSE 0 END) as hostile_events,
+            MAX(timestamp) as last_seen
+        FROM security_events WHERE client_ip = ?
+        """, (ip,))
+        ev_stats = cursor.fetchone()
+        total_ev = ev_stats[0] if ev_stats else 0
+        hostile_ev = ev_stats[1] if ev_stats else 0
+        last_seen = ev_stats[2] if ev_stats else None
+
+        if is_blocked:
+            score = 98
+            reputation = "MALICIOUS"
+        elif hostile_ev > 10:
+            score = 88
+            reputation = "MALICIOUS"
+        elif hostile_ev > 0:
+            score = 65
+            reputation = "SUSPICIOUS"
+        elif total_ev > 50:
+            score = 35
+            reputation = "NEUTRAL"
+        else:
+            score = 12
+            reputation = "BENIGN"
+
+        tags = []
+        if is_blocked:
+            tags.append("WAF_ACTIVE_QUARANTINE")
+        if hostile_ev > 0:
+            tags.append("ATTACK_ORIGINATOR")
+        if "127.0.0.1" in ip or "testclient" in ip:
+            tags.append("INTERNAL_SANDBOX")
+        elif ip.startswith("203.0.113.") or ip.startswith("198.51.100."):
+            tags.append("DOCUMENTED_ADVERSARY_RANGE")
+            tags.append("AUTOMATED_SCANNER")
+        else:
+            tags.append("EXTERNAL_CLIENT")
+
+        return {
+            "ip": ip,
+            "reputation": reputation,
+            "threat_score": score,
+            "confidence": 0.94 if (hostile_ev > 0 or is_blocked) else 0.85,
+            "is_blocked": is_blocked,
+            "block_reason": blocked_row["reason"] if blocked_row else None,
+            "total_events_observed": total_ev,
+            "hostile_events_observed": hostile_ev,
+            "last_seen": last_seen,
+            "provider": "AutoHeal Sentinel Threat Intelligence Hub",
+            "provider_status": "ONLINE (Local Cache & Behavioral Engine)",
+            "geo": {
+                "country": "Simulated Threat Origin" if hostile_ev > 0 else "Internal/Enterprise",
+                "city": "Autonomous SOC Lab",
+                "asn": "AS64496 AutoHeal Defense Grid"
+            },
+            "tags": tags,
+            "last_updated": datetime.now(timezone.utc).isoformat()
+        }
+
+
+def get_detection_rule_catalog() -> List[Dict[str, Any]]:
+    """Calculates live telemetry event counts and linked security incident counts for all 7 detection rules."""
+    init_db()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+
+        catalog = []
+        for rule_id, meta in RULE_METADATA.items():
+            cursor.execute("""
+            SELECT COUNT(*), MAX(timestamp) 
+            FROM security_events 
+            WHERE event_type LIKE ? OR details_json LIKE ?
+            """, (f"%{rule_id}%", f"%{rule_id}%"))
+            ev_row = cursor.fetchone()
+            ev_count = ev_row[0] if ev_row else 0
+            last_triggered = ev_row[1] if ev_row and ev_row[1] else None
+
+            cursor.execute("SELECT COUNT(*) FROM security_incidents WHERE rule_id = ?", (rule_id,))
+            inc_row = cursor.fetchone()
+            inc_count = inc_row[0] if inc_row else 0
+
+            catalog.append({
+                "rule_id": rule_id,
+                "rule_name": meta["rule_name"],
+                "description": meta["description"],
+                "category": meta["category"],
+                "severity": meta["severity"],
+                "enabled": True,
+                "mitre_technique_id": meta["mitre_technique_id"],
+                "mitre_tactic": meta["mitre_tactic"],
+                "mitre_name": meta["mitre_name"],
+                "detection_logic": meta["detection_logic"],
+                "related_event_count": ev_count,
+                "related_incident_count": inc_count,
+                "last_triggered": last_triggered
+            })
+
+        return catalog
+
+
 # --- Database Operations for Security Incidents ---
 def create_security_incident(
     rule_id: str,

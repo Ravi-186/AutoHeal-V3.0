@@ -80,6 +80,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // 4. Initial data loads
     loadSecurityEvents();
+    loadDetectionRuleCatalog();
+    initThreatCenterSSE();
     loadIncidentsList();
     loadQuarantinedClients();
     loadVulnerabilitiesTable();
@@ -1552,106 +1554,467 @@ function openGeneratedReport() {
 }
 
 // =========================================================================
-// 4. LIVE SECURITY EVENTS TABLE & FILTERS
+// 4. LIVE THREAT CENTER & SECURITY EVENT EXPLORER CONTROLLER (PHASE 3)
 // =========================================================================
 
-async function loadSecurityEvents() {
-    const tbody = document.getElementById('eventsTableBody') || document.getElementById('securityEventsTableBody');
+let threatCenterCurrentPage = 1;
+let threatCenterPerPage = 25;
+let threatCenterTotalPages = 1;
+let threatCenterTotalEvents = 0;
+let threatCenterTimeRange = 'all';
+let threatCenterSelectedRule = null;
+let threatCenterStreamActive = true;
+let threatCenterEventSource = null;
+let threatCenterSearchDebounce = null;
+let threatCenterStreamBuffer = []; // Bounded buffer (max 30 items)
+let threatCenterSeenIds = new Set(); // Duplicate event protection
+let threatCenterReconAttempts = 0;
+let threatCenterPollingFallbackTimer = null;
+
+// Safe HTML entity escaping helper to prevent XSS execution
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+// Map severity to Obsidian Sentinel badge HTML
+function getSeverityBadgeHtml(sev) {
+    const s = (sev || 'INFO').toUpperCase();
+    if (s === 'CRITICAL') return '<span class="badge badge-critical"><i class="fas fa-radiation"></i> CRITICAL</span>';
+    if (s === 'HIGH') return '<span class="badge badge-danger"><i class="fas fa-exclamation-triangle"></i> HIGH</span>';
+    if (s === 'MEDIUM') return '<span class="badge badge-warning"><i class="fas fa-exclamation-circle"></i> MEDIUM</span>';
+    if (s === 'LOW') return '<span class="badge badge-info"><i class="fas fa-info-circle"></i> LOW</span>';
+    return '<span class="badge badge-neutral"><i class="fas fa-circle-info"></i> INFO</span>';
+}
+
+function updateThreatCenterConnectionState(state, customText = '') {
+    const badge = document.getElementById('threatCenterConnBadge');
+    const textEl = document.getElementById('threatCenterConnText');
+    if (!badge || !textEl) return;
+
+    badge.className = 'live-status-pill';
+    if (state === 'CONNECTED') {
+        badge.classList.add('connected');
+        textEl.textContent = customText || 'Connected (SSE)';
+    } else if (state === 'RECONNECTING') {
+        badge.classList.add('reconnecting');
+        textEl.textContent = customText || 'Reconnecting...';
+    } else if (state === 'DEGRADED') {
+        badge.classList.add('degraded');
+        textEl.textContent = customText || 'Stream Degraded (Polling)';
+    } else {
+        badge.classList.add('disconnected');
+        textEl.textContent = customText || 'Disconnected (Offline)';
+    }
+}
+
+function initThreatCenterSSE() {
+    if (threatCenterEventSource) {
+        threatCenterEventSource.close();
+        threatCenterEventSource = null;
+    }
+
+    if (!threatCenterStreamActive) {
+        updateThreatCenterConnectionState('DISCONNECTED', 'Stream Paused');
+        return;
+    }
+
+    try {
+        updateThreatCenterConnectionState('RECONNECTING', 'Connecting Stream...');
+        threatCenterEventSource = new EventSource('/api/security/events/stream');
+
+        threatCenterEventSource.onopen = function () {
+            threatCenterReconAttempts = 0;
+            if (threatCenterPollingFallbackTimer) {
+                clearInterval(threatCenterPollingFallbackTimer);
+                threatCenterPollingFallbackTimer = null;
+            }
+            updateThreatCenterConnectionState('CONNECTED', 'Connected (SSE)');
+        };
+
+        threatCenterEventSource.addEventListener('security_event', function (e) {
+            if (!threatCenterStreamActive) return;
+            try {
+                const evt = JSON.parse(e.data);
+                handleIncomingLiveEvent(evt);
+            } catch (err) {
+                console.warn('Failed parsing incoming security_event', err);
+            }
+        });
+
+        threatCenterEventSource.addEventListener('heartbeat', function (e) {
+            try {
+                const hb = JSON.parse(e.data);
+                const lastTsEl = document.getElementById('tcLastEventTimestamp');
+                if (lastTsEl && !lastTsEl.getAttribute('data-has-event')) {
+                    lastTsEl.textContent = formatAppSecTimestamp(hb.timestamp, false);
+                }
+            } catch (err) {}
+        });
+
+        threatCenterEventSource.onerror = function (err) {
+            console.warn('Threat Center SSE stream degraded or disconnected', err);
+            threatCenterReconAttempts++;
+            if (threatCenterReconAttempts > 2) {
+                updateThreatCenterConnectionState('DEGRADED', 'Stream Degraded (Polling Fallback)');
+                if (!threatCenterPollingFallbackTimer) {
+                    threatCenterPollingFallbackTimer = setInterval(() => {
+                        if (threatCenterStreamActive) loadSecurityEvents(threatCenterCurrentPage, false, true);
+                    }, 5000);
+                }
+            } else {
+                updateThreatCenterConnectionState('RECONNECTING', 'Reconnecting...');
+            }
+        };
+    } catch (e) {
+        console.error('SSE initialization error', e);
+        updateThreatCenterConnectionState('DISCONNECTED', 'Stream Disconnected');
+    }
+}
+
+function handleIncomingLiveEvent(evt) {
+    if (!evt || !evt.event_id) return;
+
+    // Duplicate event protection
+    if (threatCenterSeenIds.has(evt.event_id)) return;
+    threatCenterSeenIds.add(evt.event_id);
+    if (threatCenterSeenIds.size > 2000) {
+        const first = threatCenterSeenIds.values().next().value;
+        threatCenterSeenIds.delete(first);
+    }
+
+    // Bounded buffer (max 30 items)
+    threatCenterStreamBuffer.unshift(evt);
+    if (threatCenterStreamBuffer.length > 30) {
+        threatCenterStreamBuffer.pop();
+    }
+
+    // Update KPI Ribbon
+    const lastTsEl = document.getElementById('tcLastEventTimestamp');
+    if (lastTsEl) {
+        lastTsEl.textContent = formatAppSecTimestamp(evt.timestamp, false);
+        lastTsEl.setAttribute('data-has-event', 'true');
+    }
+
+    // Prepend to table if on page 1 and no search query active
+    const searchVal = (document.getElementById('eventsSearchInput')?.value || '').trim();
+    if (threatCenterCurrentPage === 1 && !searchVal) {
+        const tbody = document.getElementById('eventsTableBody');
+        if (tbody) {
+            // Remove empty placeholder row if present
+            if (tbody.children.length === 1 && tbody.children[0].innerText.includes('No security telemetry')) {
+                tbody.innerHTML = '';
+            }
+            const newRow = createEventTableRow(evt, true);
+            tbody.insertBefore(newRow, tbody.firstChild);
+
+            // Keep visible rows bounded by perPage
+            if (tbody.children.length > threatCenterPerPage) {
+                tbody.removeChild(tbody.lastChild);
+            }
+        }
+    }
+}
+
+async function loadSecurityEvents(page = 1, showToast = false, silent = false) {
+    threatCenterCurrentPage = page;
+    const tbody = document.getElementById('eventsTableBody');
     if (!tbody) return;
 
-    const eventType = document.getElementById('eventsCategoryFilter')?.value || document.getElementById('eventsFilterType')?.value || '';
-    const severity = document.getElementById('eventsSeverityFilter')?.value || document.getElementById('eventsFilterSeverity')?.value || '';
+    if (!silent) {
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; color: var(--text-muted); padding: 35px;"><i class="fas fa-spinner fa-spin"></i> Querying security telemetry database...</td></tr>';
+    }
 
-    let url = '/api/security/events?limit=100';
-    if (eventType && eventType !== 'ALL') url += `&event_type=${encodeURIComponent(eventType)}`;
+    const search = document.getElementById('eventsSearchInput')?.value.trim() || '';
+    const category = document.getElementById('eventsCategoryFilter')?.value || 'ALL';
+    const severity = document.getElementById('eventsSeverityFilter')?.value || 'ALL';
+    const action = document.getElementById('eventsActionFilter')?.value || 'ALL';
+    const clientIp = document.getElementById('eventsIpFilter')?.value.trim() || '';
+    const limit = parseInt(document.getElementById('eventsPerPageSelect')?.value || '25', 10);
+    threatCenterPerPage = limit;
+
+    let url = `/api/security/events?page=${page}&limit=${limit}&time_range=${encodeURIComponent(threatCenterTimeRange)}`;
+    if (search) url += `&search=${encodeURIComponent(search)}`;
+    if (category && category !== 'ALL') url += `&category=${encodeURIComponent(category)}`;
     if (severity && severity !== 'ALL') url += `&severity=${encodeURIComponent(severity)}`;
+    if (action && action !== 'ALL') url += `&action_taken=${encodeURIComponent(action)}`;
+    if (clientIp) url += `&client_ip=${encodeURIComponent(clientIp)}`;
+    if (threatCenterSelectedRule) url += `&rule_id=${encodeURIComponent(threatCenterSelectedRule)}`;
 
     try {
         const res = await fetch(url);
-        if (!res.ok) return;
-        const events = await res.json();
-        allFetchedEvents = Array.isArray(events) ? events : (events.events || []);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
 
-        renderEventsTable(allFetchedEvents);
-    } catch (e) {
-        console.error('Error loading security events', e);
+        const events = data.events || [];
+        threatCenterTotalEvents = data.total || 0;
+        threatCenterTotalPages = data.total_pages || 1;
+        allFetchedEvents = events;
+
+        events.forEach(ev => {
+            if (ev.event_id) threatCenterSeenIds.add(ev.event_id);
+        });
+
+        // Update Summary Ribbon
+        if (data.summary) {
+            const totEl = document.getElementById('tcTotalEventsCount');
+            const critEl = document.getElementById('tcCriticalEventsCount');
+            const highEl = document.getElementById('tcHighEventsCount');
+            const lastTsEl = document.getElementById('tcLastEventTimestamp');
+
+            if (totEl) totEl.textContent = (data.summary.total || 0).toLocaleString();
+            if (critEl) critEl.textContent = (data.summary.critical || 0).toLocaleString();
+            if (highEl) highEl.textContent = (data.summary.high || 0).toLocaleString();
+            if (lastTsEl && data.summary.last_event_timestamp) {
+                lastTsEl.textContent = formatAppSecTimestamp(data.summary.last_event_timestamp, false);
+                lastTsEl.setAttribute('data-has-event', 'true');
+            }
+        }
+
+        renderSecurityEventsTable(events, threatCenterTotalEvents, page, threatCenterTotalPages);
+
+        if (showToast && typeof toastr !== 'undefined') {
+            toastr.success(`Telemetry loaded (${threatCenterTotalEvents.toLocaleString()} records in scope)`);
+        }
+    } catch (err) {
+        console.error('Failed loading security events', err);
+        tbody.innerHTML = `<tr><td colspan="10" style="text-align: center; color: var(--status-danger); padding: 30px;"><i class="fas fa-exclamation-triangle"></i> Failed loading telemetry: ${escapeHtml(err.message)}</td></tr>`;
+        updateThreatCenterConnectionState('DEGRADED', 'API Offline / Retrying');
     }
 }
 
-function renderEventsTable(events) {
-    const tbody = document.getElementById('eventsTableBody') || document.getElementById('securityEventsTableBody');
+function renderSecurityEventsTable(events, total, page, totalPages) {
+    const tbody = document.getElementById('eventsTableBody');
+    const infoEl = document.getElementById('eventsPaginationInfo');
+    const pageNumEl = document.getElementById('eventsCurrentPageNum');
+    const totalPagesEl = document.getElementById('eventsTotalPagesNum');
+    const prevBtn = document.getElementById('eventsPrevPageBtn');
+    const nextBtn = document.getElementById('eventsNextPageBtn');
+
     if (!tbody) return;
 
     if (!events || events.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 24px;">No security events recorded matching criteria.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; color: var(--text-muted); padding: 35px;"><i class="fas fa-shield"></i> No security telemetry events match the selected criteria.</td></tr>';
+        if (infoEl) infoEl.textContent = 'Showing 0 of 0 records';
+        if (pageNumEl) pageNumEl.textContent = '1';
+        if (totalPagesEl) totalPagesEl.textContent = '1';
+        if (prevBtn) prevBtn.disabled = true;
+        if (nextBtn) nextBtn.disabled = true;
         return;
     }
 
+    const startIdx = (page - 1) * threatCenterPerPage + 1;
+    const endIdx = Math.min(page * threatCenterPerPage, total);
+    if (infoEl) infoEl.textContent = `Showing ${startIdx.toLocaleString()}-${endIdx.toLocaleString()} of ${total.toLocaleString()} records`;
+    if (pageNumEl) pageNumEl.textContent = page;
+    if (totalPagesEl) totalPagesEl.textContent = totalPages;
+    if (prevBtn) prevBtn.disabled = page <= 1;
+    if (nextBtn) nextBtn.disabled = page >= totalPages;
+
     tbody.innerHTML = '';
-    events.forEach(evt => {
-        const tr = document.createElement('tr');
-        tr.style.cursor = 'pointer';
-        tr.onclick = () => openEventDetailDrawer(evt);
-
-        const timeStr = formatAppSecTimestamp(evt.timestamp, false);
-        const sevBadge = getSeverityBadgeHtml(evt.severity);
-        const method = evt.method || evt.http_method || 'GET';
-        const path = evt.path || evt.endpoint_path || '-';
-        const sc = evt.status_code || 200;
-        const actionTaken = evt.action_taken || (sc === 403 ? 'Quarantined (403)' : sc === 429 ? 'Throttled (429)' : 'Logged Nominal');
-
-        tr.innerHTML = `
-            <td style="color: var(--text-muted); font-family: var(--font-mono);">${timeStr}</td>
-            <td><strong style="color: #ffffff;">${evt.event_type}</strong></td>
-            <td>${sevBadge}</td>
-            <td><code>${evt.client_ip || '-'}</code></td>
-            <td><span style="font-weight: 600; color: #ffffff;">${method}</span> <code style="color: var(--text-muted);">${path}</code></td>
-            <td style="color: ${sc >= 400 ? 'var(--status-danger)' : 'var(--status-success)'}; font-weight: 600;">${actionTaken}</td>
-            <td>
-                <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); openEventDetailDrawer(${JSON.stringify(evt).replace(/"/g, '&quot;')})">
-                    <i class="fas fa-search"></i>
-                </button>
-            </td>
-        `;
-        tbody.appendChild(tr);
+    events.forEach(ev => {
+        tbody.appendChild(createEventTableRow(ev));
     });
+}
+
+function createEventTableRow(ev, isNewArrival = false) {
+    const tr = document.createElement('tr');
+    tr.style.cursor = 'pointer';
+    if (isNewArrival) tr.classList.add('table-row-new');
+    tr.onclick = () => openEventDetailDrawer(ev.event_id || ev.id);
+
+    const timeStr = formatAppSecTimestamp(ev.timestamp, false);
+    const sevBadge = getSeverityBadgeHtml(ev.severity);
+    const method = escapeHtml(ev.method || 'GET');
+    const path = escapeHtml(ev.path || '/');
+    const sc = ev.status_code || 200;
+    const scBadge = `<span class="badge ${sc >= 400 ? 'badge-danger' : 'badge-success'}">HTTP ${sc}</span>`;
+    const clientIp = escapeHtml(ev.client_ip || '127.0.0.1');
+    const eventId = escapeHtml(ev.event_id || `EVT-${ev.id}`);
+    const eventType = escapeHtml(ev.event_type || 'NORMAL_REQUEST');
+    const ruleId = ev.rule_id ? `<span class="badge badge-neutral" style="font-family:var(--font-mono); font-size:10px;">${escapeHtml(ev.rule_id)}</span>` : '';
+    const actionTaken = escapeHtml(ev.action_taken || (sc === 403 ? 'BLOCKED' : sc === 429 ? 'THROTTLED' : 'ALLOWED'));
+    const invStatus = ev.investigation_status || 'NEW';
+    const invBadge = `<span class="badge ${invStatus === 'INVESTIGATING' ? 'badge-warning' : invStatus === 'CLOSED' ? 'badge-neutral' : 'badge-info'}" style="font-size:10px;">${invStatus}</span>`;
+
+    tr.innerHTML = `
+        <td style="color: var(--text-muted); font-family: var(--font-mono); font-size: 11px;">${timeStr}</td>
+        <td><code style="color: var(--accent-cyan); font-size: 11px;">${eventId}</code></td>
+        <td>${sevBadge}</td>
+        <td>
+            <div style="font-weight: 600; color: #ffffff; font-size: 12px; display: flex; align-items: center; gap: 6px;">
+                ${eventType} ${ruleId}
+            </div>
+        </td>
+        <td>
+            <div style="font-size: 11px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                <strong style="color: #ffffff;">${method}</strong> <code style="color: var(--text-secondary);">${path}</code>
+            </div>
+        </td>
+        <td>${scBadge}</td>
+        <td><code style="color: var(--text-primary); font-size: 11px;">${clientIp}</code></td>
+        <td style="font-size: 11px; font-weight: 600; color: ${sc >= 400 ? 'var(--status-danger)' : 'var(--status-success)'};">${actionTaken}</td>
+        <td>${invBadge}</td>
+        <td style="text-align: center;">
+            <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); openEventDetailDrawer('${eventId}')" title="Inspect forensic dossier">
+                <i class="fas fa-search"></i>
+            </button>
+        </td>
+    `;
+    return tr;
+}
+
+function handleEventsSearchInput() {
+    if (threatCenterSearchDebounce) clearTimeout(threatCenterSearchDebounce);
+    threatCenterSearchDebounce = setTimeout(() => {
+        loadSecurityEvents(1);
+    }, 300);
+}
+
+function changeEventsPage(delta) {
+    const targetPage = threatCenterCurrentPage + delta;
+    if (targetPage >= 1 && targetPage <= threatCenterTotalPages) {
+        loadSecurityEvents(targetPage);
+    }
+}
+
+function setThreatCenterTimeRange(range) {
+    threatCenterTimeRange = range;
+    ['all', '1h', '24h', '7d', '30d'].forEach(r => {
+        const btn = document.getElementById(`tcRange${r === 'all' ? 'All' : r}`);
+        if (btn) {
+            btn.classList.toggle('active', r === range);
+        }
+    });
+    loadSecurityEvents(1);
+}
+
+function toggleThreatCenterStream() {
+    const icon = document.getElementById('tcStreamIcon');
+    const text = document.getElementById('tcStreamText');
+    threatCenterStreamActive = !threatCenterStreamActive;
+
+    if (threatCenterStreamActive) {
+        if (icon) icon.className = 'fas fa-pause';
+        if (text) text.textContent = 'Stream Active';
+        initThreatCenterSSE();
+        toastr.success('Real-time event stream resumed');
+    } else {
+        if (icon) icon.className = 'fas fa-play';
+        if (text) text.textContent = 'Stream Paused';
+        if (threatCenterEventSource) {
+            threatCenterEventSource.close();
+            threatCenterEventSource = null;
+        }
+        if (threatCenterPollingFallbackTimer) {
+            clearInterval(threatCenterPollingFallbackTimer);
+            threatCenterPollingFallbackTimer = null;
+        }
+        updateThreatCenterConnectionState('DISCONNECTED', 'Stream Paused');
+        toastr.info('Real-time event stream paused');
+    }
+}
+
+function resetThreatCenterFilters() {
+    const sInput = document.getElementById('eventsSearchInput');
+    const cFilter = document.getElementById('eventsCategoryFilter');
+    const sevFilter = document.getElementById('eventsSeverityFilter');
+    const aFilter = document.getElementById('eventsActionFilter');
+    const ipFilter = document.getElementById('eventsIpFilter');
+    if (sInput) sInput.value = '';
+    if (cFilter) cFilter.value = 'ALL';
+    if (sevFilter) sevFilter.value = 'ALL';
+    if (aFilter) aFilter.value = 'ALL';
+    if (ipFilter) ipFilter.value = '';
+    threatCenterSelectedRule = null;
+    loadDetectionRuleCatalog();
+    loadSecurityEvents(1);
+    toastr.info('Threat Center filters reset to default');
+}
+
+async function loadDetectionRuleCatalog() {
+    const container = document.getElementById('threatCenterRuleCatalogBar');
+    if (!container) return;
+
+    try {
+        const res = await fetch('/api/security/rules/catalog');
+        if (!res.ok) return;
+        const data = await res.json();
+        const rules = data.rules || [];
+
+        container.innerHTML = '';
+        rules.forEach(r => {
+            const card = document.createElement('div');
+            card.className = `rule-chip-card ${threatCenterSelectedRule === r.rule_id ? 'active' : ''}`;
+            card.onclick = () => filterByRule(r.rule_id);
+
+            const sevBadge = `<span class="badge ${r.severity === 'CRITICAL' ? 'badge-critical' : r.severity === 'HIGH' ? 'badge-danger' : 'badge-warning'}" style="font-size:9px; padding:1px 5px;">${r.severity}</span>`;
+
+            card.innerHTML = `
+                <div class="rule-chip-top">
+                    <span class="rule-chip-id">${escapeHtml(r.rule_id)}</span>
+                    ${sevBadge}
+                </div>
+                <div class="rule-chip-name" title="${escapeHtml(r.rule_name)}">${escapeHtml(r.rule_name)}</div>
+                <div class="rule-chip-counts">
+                    <span><i class="fas fa-bolt" style="color:var(--primary);"></i> ${r.related_event_count.toLocaleString()} evts</span>
+                    <span><i class="fas fa-shield-virus" style="color:var(--status-danger);"></i> ${r.related_incident_count} inc</span>
+                </div>
+            `;
+            container.appendChild(card);
+        });
+    } catch (err) {
+        console.warn('Failed loading rule catalog', err);
+    }
+}
+
+function filterByRule(ruleId) {
+    if (threatCenterSelectedRule === ruleId) {
+        threatCenterSelectedRule = null;
+    } else {
+        threatCenterSelectedRule = ruleId;
+    }
+    loadDetectionRuleCatalog();
+    loadSecurityEvents(1);
+}
+
+function exportThreatCenterCSV() {
+    const search = document.getElementById('eventsSearchInput')?.value.trim() || '';
+    const category = document.getElementById('eventsCategoryFilter')?.value || 'ALL';
+    const severity = document.getElementById('eventsSeverityFilter')?.value || 'ALL';
+    let url = `/api/security/events?format=csv&limit=500&time_range=${encodeURIComponent(threatCenterTimeRange)}`;
+    if (search) url += `&search=${encodeURIComponent(search)}`;
+    if (category && category !== 'ALL') url += `&category=${encodeURIComponent(category)}`;
+    if (severity && severity !== 'ALL') url += `&severity=${encodeURIComponent(severity)}`;
+    if (threatCenterSelectedRule) url += `&rule_id=${encodeURIComponent(threatCenterSelectedRule)}`;
+
+    window.open(url, '_blank');
+    toastr.success('Exporting filtered telemetry to CSV...');
+}
+
+function exportThreatCenterJSON() {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(allFetchedEvents, null, 2));
+    const dlAnchor = document.createElement('a');
+    dlAnchor.setAttribute("href", dataStr);
+    dlAnchor.setAttribute("download", `telemetry_events_${Date.now()}.json`);
+    document.body.appendChild(dlAnchor);
+    dlAnchor.click();
+    dlAnchor.remove();
+    toastr.success('Exported current telemetry records to JSON');
+}
+
+// Backward compatibility alias for legacy triggers
+function exportEventsCSV() {
+    exportThreatCenterCSV();
 }
 
 function filterEventsTable() {
-    const query = document.getElementById('eventsSearchInput')?.value.toLowerCase().trim() || '';
-    if (!query) {
-        renderEventsTable(allFetchedEvents);
-        return;
-    }
-
-    const filtered = allFetchedEvents.filter(e => {
-        const ip = (e.client_ip || '').toLowerCase();
-        const path = (e.path || e.endpoint_path || '').toLowerCase();
-        const method = (e.method || e.http_method || '').toLowerCase();
-        const type = (e.event_type || '').toLowerCase();
-        const corr = (e.correlation_id || '').toLowerCase();
-        return ip.includes(query) || path.includes(query) || method.includes(query) || type.includes(query) || corr.includes(query);
-    });
-
-    renderEventsTable(filtered);
-}
-
-function toggleEventsAutoRefresh() {
-    const statusEl = document.getElementById('autoRefreshStatus');
-    const iconEl = document.getElementById('autoRefreshIcon');
-
-    if (eventsAutoRefreshTimer) {
-        clearInterval(eventsAutoRefreshTimer);
-        eventsAutoRefreshTimer = null;
-        if (statusEl) statusEl.textContent = 'OFF';
-        if (iconEl) iconEl.className = 'fas fa-play';
-        toastr.info('Events auto-refresh paused.');
-    } else {
-        eventsAutoRefreshTimer = setInterval(loadSecurityEvents, 3000);
-        if (statusEl) statusEl.textContent = 'ON (3s)';
-        if (iconEl) iconEl.className = 'fas fa-pause';
-        toastr.success('Events auto-refresh activated.');
-    }
+    loadSecurityEvents(1);
 }
 
 // =========================================================================
@@ -2507,58 +2870,69 @@ function initCommandPalette() {
 }
 
 // =========================================================================
-// 9. SIDE-OVER EVENT DETAIL DRAWER & TELEMETRY INSPECTOR
+// 9. SIDE-OVER EVENT DETAIL DRAWER & 5-TAB FORENSIC INSPECTOR
 // =========================================================================
 
 let currentDrawerEvent = null;
+let currentDrawerActiveTab = 'overview';
 
-function openEventDetailDrawer(eventObj) {
-    currentDrawerEvent = eventObj;
+function switchDrawerTab(tabName) {
+    currentDrawerActiveTab = tabName;
+    const tabBtns = ['overview', 'evidence', 'detection', 'related', 'raw'];
+    tabBtns.forEach(t => {
+        const btn = document.getElementById(`tabBtn${t.charAt(0).toUpperCase() + t.slice(1)}`);
+        const pane = document.getElementById(`drawerTab${t.charAt(0).toUpperCase() + t.slice(1)}`);
+        if (btn) btn.classList.toggle('active', t === tabName);
+        if (pane) pane.classList.toggle('active', t === tabName);
+    });
+}
+
+async function openEventDetailDrawer(eventIdOrObj) {
     const drawer = document.getElementById('eventDetailDrawer');
     const backdrop = document.getElementById('eventDrawerBackdrop');
-    const body = document.getElementById('eventDetailDrawerBody');
-    if (!drawer || !body) return;
-
-    const timeStr = formatAppSecTimestamp(eventObj.timestamp, true);
-    const sevBadge = getSeverityBadgeHtml(eventObj.severity);
-    const method = eventObj.method || eventObj.http_method || 'GET';
-    const path = eventObj.path || eventObj.endpoint_path || '-';
-    const sc = eventObj.status_code || 200;
-
-    body.innerHTML = `
-        <div style="margin-bottom: 16px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                <span class="badge ${sc >= 400 ? 'badge-critical' : 'badge-success'}">HTTP ${sc}</span>
-                ${sevBadge}
-            </div>
-            <h4 style="font-size:15px; font-weight:800; color:var(--text-primary); margin-bottom:4px;">${eventObj.event_type || 'SECURITY_EVENT'}</h4>
-            <div style="font-size:11px; color:var(--text-muted); font-family:var(--font-mono);">Event ID: ${eventObj.event_id || '-'}</div>
-        </div>
-
-        <div style="background:var(--bg-card-subtle); border:1px solid var(--border-panel); border-radius:var(--radius-sm); padding:12px; margin-bottom:16px;">
-            <div style="font-size:10px; font-weight:700; color:var(--text-muted); text-transform:uppercase; margin-bottom:8px;">Request Metadata</div>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:11px;">
-                <div>Client IP: <code style="color:var(--accent-cyan);">${eventObj.client_ip || '-'}</code></div>
-                <div>Method: <strong style="color:#ffffff;">${method}</strong></div>
-                <div style="grid-column: span 2;">Path: <code>${path}</code></div>
-                <div style="grid-column: span 2;">Timestamp: <span style="color:var(--text-secondary);">${timeStr}</span></div>
-                <div style="grid-column: span 2;">Correlation ID: <span style="font-family:var(--font-mono); font-size:10px; color:var(--text-muted);">${eventObj.correlation_id || '-'}</span></div>
-            </div>
-        </div>
-
-        <div style="margin-bottom: 16px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                <span style="font-size:11px; font-weight:700; color:var(--text-secondary); text-transform:uppercase;">Raw JSON Payload</span>
-                <button class="btn btn-secondary btn-sm" onclick="copyDrawerRawJson()">
-                    <i class="fas fa-copy"></i> Copy JSON
-                </button>
-            </div>
-            <pre class="drawer-raw-pre" id="drawerRawPre">${JSON.stringify(eventObj, null, 2)}</pre>
-        </div>
-    `;
+    if (!drawer) return;
 
     drawer.classList.add('open');
     if (backdrop) backdrop.classList.add('active');
+
+    const eventId = typeof eventIdOrObj === 'string' ? eventIdOrObj : (eventIdOrObj.event_id || `EVT-${eventIdOrObj.id}`);
+    const headingEl = document.getElementById('drawerEventIdHeading');
+    const sevBadgeEl = document.getElementById('drawerSeverityBadge');
+    if (headingEl) headingEl.textContent = eventId;
+
+    try {
+        const res = await fetch(`/api/security/events/${encodeURIComponent(eventId)}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const ev = await res.json();
+        currentDrawerEvent = ev;
+
+        if (sevBadgeEl) sevBadgeEl.innerHTML = getSeverityBadgeHtml(ev.severity);
+
+        populateDrawerOverviewTab(ev);
+        populateDrawerEvidenceTab(ev);
+        populateDrawerDetectionTab(ev);
+        loadDrawerRelatedEvents(ev.event_id);
+
+        const rawPre = document.getElementById('drawerRawPre');
+        if (rawPre) {
+            rawPre.textContent = JSON.stringify(ev, null, 2);
+        }
+
+        const invStatus = document.getElementById('drawerInvestigationStatus');
+        const invNotes = document.getElementById('drawerInvestigationNotes');
+        if (invStatus && ev.investigation) {
+            invStatus.value = ev.investigation.status || 'NEW';
+        }
+        if (invNotes && ev.investigation) {
+            invNotes.value = ev.investigation.notes || '';
+        }
+
+        switchDrawerTab('overview');
+    } catch (err) {
+        console.error('Error fetching event details', err);
+        const body = document.getElementById('drawerTabOverview');
+        if (body) body.innerHTML = `<div style="padding:20px; color:var(--status-danger);"><i class="fas fa-exclamation-triangle"></i> Failed loading event dossier: ${escapeHtml(err.message)}</div>`;
+    }
 }
 
 function closeEventDetailDrawer() {
@@ -2566,6 +2940,366 @@ function closeEventDetailDrawer() {
     const backdrop = document.getElementById('eventDrawerBackdrop');
     if (drawer) drawer.classList.remove('open');
     if (backdrop) backdrop.classList.remove('active');
+    currentDrawerEvent = null;
+}
+
+function populateDrawerOverviewTab(ev) {
+    const pane = document.getElementById('drawerTabOverview');
+    if (!pane) return;
+
+    const timeStr = formatAppSecTimestamp(ev.timestamp, true);
+    const method = escapeHtml(ev.method || 'GET');
+    const path = escapeHtml(ev.path || '/');
+    const sc = ev.status_code || 200;
+    const latency = ev.latency_ms ? `${ev.latency_ms} ms` : '-';
+    const clientIp = escapeHtml(ev.client_ip || '127.0.0.1');
+    const corrId = escapeHtml(ev.correlation_id || '-');
+    const userAgent = escapeHtml(ev.user_agent || 'Unknown');
+    const session = escapeHtml(ev.user_id_or_session || 'Anonymous');
+    const action = escapeHtml(ev.action_taken || (sc === 403 ? 'BLOCKED' : sc === 429 ? 'THROTTLED' : 'ALLOWED'));
+
+    let incidentHtml = '<span style="color:var(--text-muted); font-size:12px;">No formal incident associated</span>';
+    if (ev.related_incident) {
+        incidentHtml = `
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                <strong style="color:var(--status-danger); font-family:var(--font-mono); font-size:12px;">${escapeHtml(ev.related_incident.incident_id)}</strong>
+                <span class="badge badge-warning" style="font-size:10px;">${escapeHtml(ev.related_incident.status)}</span>
+                <button class="btn btn-secondary btn-sm" style="font-size:10px; padding:2px 8px;" onclick="viewIncidentFromEvent('${escapeHtml(ev.related_incident.incident_id)}')">
+                    View Incident <i class="fas fa-arrow-right"></i>
+                </button>
+            </div>
+        `;
+    }
+
+    pane.innerHTML = `
+        <div class="drawer-meta-grid">
+            <div class="drawer-meta-cell">
+                <div class="drawer-meta-label">Client IP &amp; Origin</div>
+                <div class="drawer-meta-val">
+                    <code style="color:var(--accent-cyan); font-size:13px;">${clientIp}</code>
+                    <button class="btn btn-ghost btn-sm" style="padding:2px 6px; margin-left:6px;" onclick="lookupThreatIntelForIp('${clientIp}')" title="Lookup threat intelligence">
+                        <i class="fas fa-brain"></i> Threat Intel
+                    </button>
+                </div>
+            </div>
+            <div class="drawer-meta-cell">
+                <div class="drawer-meta-label">HTTP Method &amp; Status</div>
+                <div class="drawer-meta-val">
+                    <strong style="color:#ffffff;">${method}</strong> 
+                    <span class="badge ${sc >= 400 ? 'badge-danger' : 'badge-success'}" style="margin-left:6px;">HTTP ${sc}</span>
+                    <span style="font-size:10px; color:var(--text-muted); margin-left:6px;">(${latency})</span>
+                </div>
+            </div>
+            <div class="drawer-meta-cell" style="grid-column: span 2;">
+                <div class="drawer-meta-label">Target Resource Path</div>
+                <div class="drawer-meta-val"><code style="color:#ffffff;">${path}</code></div>
+            </div>
+            <div class="drawer-meta-cell">
+                <div class="drawer-meta-label">Timestamp (UTC)</div>
+                <div class="drawer-meta-val">${timeStr}</div>
+            </div>
+            <div class="drawer-meta-cell">
+                <div class="drawer-meta-label">Autonomous Action Taken</div>
+                <div class="drawer-meta-val" style="color:${sc >= 400 ? 'var(--status-danger)' : 'var(--status-success)'}; font-weight:700;">
+                    ${action}
+                </div>
+            </div>
+            <div class="drawer-meta-cell">
+                <div class="drawer-meta-label">Correlation Trace ID</div>
+                <div class="drawer-meta-val"><span style="font-family:var(--font-mono); font-size:11px; color:var(--text-secondary);">${corrId}</span></div>
+            </div>
+            <div class="drawer-meta-cell">
+                <div class="drawer-meta-label">User / Session ID</div>
+                <div class="drawer-meta-val"><span style="font-family:var(--font-mono); font-size:11px;">${session}</span></div>
+            </div>
+            <div class="drawer-meta-cell" style="grid-column: span 2;">
+                <div class="drawer-meta-label">User Agent</div>
+                <div class="drawer-meta-val" style="font-size:11px; color:var(--text-secondary);">${userAgent}</div>
+            </div>
+            <div class="drawer-meta-cell" style="grid-column: span 2;">
+                <div class="drawer-meta-label">Associated Security Incident</div>
+                <div class="drawer-meta-val">${incidentHtml}</div>
+            </div>
+        </div>
+
+        <div id="drawerThreatIntelContainer"></div>
+    `;
+}
+
+function populateDrawerEvidenceTab(ev) {
+    const pane = document.getElementById('drawerTabEvidence');
+    if (!pane) return;
+
+    const details = ev.details || {};
+    const evidence = details.evidence || {};
+    const matchedPattern = evidence.matched_pattern || details.matched_pattern || '-';
+    const queryString = evidence.query_string || details.query_string || '-';
+    const whyFlagged = details.why_flagged || 'Observed telemetry signature matches autonomous detection rule threshold.';
+    const falsePos = details.false_positive_considerations || 'Standard web storefront requests do not contain active exploit syntax.';
+
+    pane.innerHTML = `
+        <div style="margin-bottom:16px;">
+            <div style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--status-danger); margin-bottom:6px;">
+                <i class="fas fa-bullseye"></i> Matched Attack Pattern
+            </div>
+            <pre class="drawer-raw-pre" style="color:#fca5a5; max-height:120px;">${escapeHtml(matchedPattern)}</pre>
+        </div>
+
+        <div style="margin-bottom:16px;">
+            <div style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--text-muted); margin-bottom:6px;">
+                <i class="fas fa-terminal"></i> Query String &amp; Parameters
+            </div>
+            <pre class="drawer-raw-pre" style="color:#a5f3fc; max-height:100px;">${escapeHtml(queryString)}</pre>
+        </div>
+
+        <div class="drawer-meta-cell" style="margin-bottom:12px;">
+            <div class="drawer-meta-label" style="color:var(--accent-cyan);"><i class="fas fa-question-circle"></i> Detection Rationale (Why Flagged)</div>
+            <div class="drawer-meta-val" style="font-size:12px; color:var(--text-secondary); line-height:1.5;">${escapeHtml(whyFlagged)}</div>
+        </div>
+
+        <div class="drawer-meta-cell">
+            <div class="drawer-meta-label" style="color:var(--status-warning);"><i class="fas fa-scale-balanced"></i> False Positive Considerations</div>
+            <div class="drawer-meta-val" style="font-size:12px; color:var(--text-secondary); line-height:1.5;">${escapeHtml(falsePos)}</div>
+        </div>
+    `;
+}
+
+function populateDrawerDetectionTab(ev) {
+    const pane = document.getElementById('drawerTabDetection');
+    if (!pane) return;
+
+    const rule = ev.detection_rule;
+    const details = ev.details || {};
+    const confidence = details.confidence ? Math.round(details.confidence * 100) : 95;
+
+    if (!rule) {
+        pane.innerHTML = `
+            <div class="soc-card" style="padding:25px; text-align:center;">
+                <div style="font-size:13px; font-weight:600; color:var(--text-primary); margin-bottom:6px;">Nominal Telemetry Event</div>
+                <p style="font-size:12px; color:var(--text-secondary); margin:0;">This request executed within nominal operational thresholds. No active detection rule was triggered.</p>
+            </div>
+        `;
+        return;
+    }
+
+    pane.innerHTML = `
+        <div class="soc-card" style="margin-bottom:16px;">
+            <div class="soc-card-header" style="padding:10px 14px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span class="badge badge-neutral" style="font-family:var(--font-mono); font-size:11px; font-weight:700;">${escapeHtml(rule.rule_id)}</span>
+                    <strong style="color:var(--text-primary); font-size:13px;">${escapeHtml(rule.rule_name)}</strong>
+                </div>
+                ${getSeverityBadgeHtml(rule.severity)}
+            </div>
+            <div class="soc-card-body" style="padding:14px;">
+                <p style="font-size:12px; color:var(--text-secondary); line-height:1.5; margin-bottom:14px;">${escapeHtml(rule.description)}</p>
+
+                <div style="background:var(--bg-card-subtle); border:1px solid var(--border-panel); border-radius:var(--radius-sm); padding:10px 12px; margin-bottom:14px;">
+                    <div style="font-size:10px; font-weight:700; color:var(--text-muted); text-transform:uppercase; margin-bottom:6px;">MITRE ATT&amp;CK Alignment</div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:11px;">
+                        <div>Technique: <code style="color:var(--accent-cyan);">${escapeHtml(rule.mitre_technique_id)}</code></div>
+                        <div>Tactic: <strong>${escapeHtml(rule.mitre_tactic)}</strong></div>
+                        <div style="grid-column:span 2;">Name: <span style="color:var(--text-primary);">${escapeHtml(rule.mitre_name)}</span></div>
+                    </div>
+                </div>
+
+                <div style="margin-bottom:12px;">
+                    <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:4px;">
+                        <span style="font-weight:700; color:var(--text-secondary);">Detection Confidence</span>
+                        <strong style="color:var(--accent-cyan); font-family:var(--font-mono);">${confidence}%</strong>
+                    </div>
+                    <div style="height:6px; background:var(--bg-card-subtle); border-radius:3px; overflow:hidden;">
+                        <div style="width:${confidence}%; height:100%; background:var(--primary);"></div>
+                    </div>
+                </div>
+
+                <div class="drawer-meta-cell">
+                    <div class="drawer-meta-label">Detection Algorithm Logic</div>
+                    <div class="drawer-meta-val" style="font-size:11px; color:var(--text-secondary); font-family:var(--font-mono);">${escapeHtml(rule.detection_logic)}</div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+async function loadDrawerRelatedEvents(eventId) {
+    const pane = document.getElementById('drawerTabRelated');
+    if (!pane) return;
+
+    pane.innerHTML = '<div style="text-align: center; padding: 30px; color: var(--text-muted);"><i class="fas fa-spinner fa-spin"></i> Correlating related telemetry events...</div>';
+
+    try {
+        const res = await fetch(`/api/security/events/${encodeURIComponent(eventId)}/related?limit=15`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const related = data.related_events || [];
+
+        if (related.length === 0) {
+            pane.innerHTML = '<div style="padding:25px; text-align:center; color:var(--text-muted); font-size:12px;"><i class="fas fa-info-circle"></i> No correlated telemetry events found within temporal proximity.</div>';
+            return;
+        }
+
+        let html = '<div class="drawer-timeline">';
+        related.forEach(r => {
+            const timeStr = formatAppSecTimestamp(r.timestamp, true);
+            const isConfirmed = r.relationship_type === 'CONFIRMED_CORRELATION';
+            const badgeClass = isConfirmed ? 'badge-danger' : 'badge-warning';
+            const sc = r.status_code || 200;
+
+            html += `
+                <div class="drawer-timeline-item ${isConfirmed ? 'confirmed' : ''}">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                        <span style="font-size:11px; font-family:var(--font-mono); color:var(--text-muted);">${timeStr}</span>
+                        <span class="badge ${badgeClass}" style="font-size:9px; padding:1px 6px;">${escapeHtml(r.relationship_type)}</span>
+                    </div>
+                    <div style="font-size:12px; font-weight:600; color:#ffffff; margin-bottom:2px;">
+                        ${escapeHtml(r.event_type || 'SECURITY_EVENT')}
+                        <span class="badge ${sc >= 400 ? 'badge-danger' : 'badge-success'}" style="font-size:9px; margin-left:6px;">HTTP ${sc}</span>
+                    </div>
+                    <div style="font-size:11px; color:var(--text-secondary); margin-bottom:4px;">
+                        <code>${escapeHtml(r.method || 'GET')} ${escapeHtml(r.path || '/')}</code>
+                    </div>
+                    <div style="font-size:10px; color:var(--text-muted); font-style:italic; display:flex; justify-content:space-between; align-items:center;">
+                        <span>${escapeHtml(r.relationship_detail || '')}</span>
+                        <button class="btn btn-ghost btn-sm" style="font-size:10px; padding:1px 6px;" onclick="openEventDetailDrawer('${escapeHtml(r.event_id)}')">
+                            Inspect <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
+        pane.innerHTML = html;
+    } catch (err) {
+        pane.innerHTML = `<div style="padding:20px; color:var(--status-danger); font-size:12px;">Failed querying related events: ${escapeHtml(err.message)}</div>`;
+    }
+}
+
+async function lookupThreatIntelForIp(ip) {
+    const container = document.getElementById('drawerThreatIntelContainer');
+    if (!container) return;
+
+    container.innerHTML = '<div style="padding:12px; background:var(--bg-card-subtle); border:1px solid var(--border-panel); border-radius:var(--radius-sm); font-size:11px; color:var(--text-muted);"><i class="fas fa-spinner fa-spin"></i> Contacting threat intelligence provider...</div>';
+
+    try {
+        const res = await fetch(`/api/security/threat-intel/enrich?ip=${encodeURIComponent(ip)}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+
+        const repBadge = data.reputation === 'MALICIOUS' ? '<span class="badge badge-critical">MALICIOUS</span>' : data.reputation === 'SUSPICIOUS' ? '<span class="badge badge-warning">SUSPICIOUS</span>' : '<span class="badge badge-success">BENIGN</span>';
+        const tagsHtml = (data.tags || []).map(t => `<span class="badge badge-neutral" style="font-size:9px;">${escapeHtml(t)}</span>`).join(' ');
+
+        container.innerHTML = `
+            <div style="background:var(--bg-card-subtle); border:1px solid var(--border-panel); border-radius:var(--radius-sm); padding:12px; margin-top:12px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <span style="font-size:11px; font-weight:700; color:var(--primary); text-transform:uppercase;">
+                        <i class="fas fa-brain"></i> Threat Intelligence Enrichment
+                    </span>
+                    ${repBadge}
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:11px; margin-bottom:8px;">
+                    <div>Threat Score: <strong style="color:var(--status-danger); font-family:var(--font-mono);">${data.threat_score}/100</strong></div>
+                    <div>Confidence: <strong style="color:var(--accent-cyan); font-family:var(--font-mono);">${Math.round(data.confidence * 100)}%</strong></div>
+                    <div>Origin: <span>${escapeHtml(data.geo?.country || 'Unknown')}</span></div>
+                    <div>ASN: <span>${escapeHtml(data.geo?.asn || 'Internal')}</span></div>
+                    <div style="grid-column:span 2;">Active Quarantine: <strong style="color:${data.is_blocked ? 'var(--status-danger)' : 'var(--status-success)'};">${data.is_blocked ? 'YES (Blocked in WAF)' : 'NO'}</strong></div>
+                </div>
+                <div style="display:flex; gap:4px; flex-wrap:wrap; margin-bottom:8px;">${tagsHtml}</div>
+                <div style="font-size:10px; color:var(--text-muted); font-style:italic;">Provider: ${escapeHtml(data.provider)} (${escapeHtml(data.provider_status)})</div>
+            </div>
+        `;
+    } catch (err) {
+        container.innerHTML = `<div style="padding:10px; font-size:11px; color:var(--text-muted); background:var(--bg-card-subtle); border-radius:var(--radius-sm);">Threat Intel Enrichment: Internal Telemetry Only (${escapeHtml(err.message)})</div>`;
+    }
+}
+
+async function saveDrawerInvestigation() {
+    if (!currentDrawerEvent) return;
+    const eventId = currentDrawerEvent.event_id;
+    const status = document.getElementById('drawerInvestigationStatus')?.value || 'INVESTIGATING';
+    const notes = document.getElementById('drawerInvestigationNotes')?.value || '';
+
+    try {
+        const res = await fetch(`/api/security/events/${encodeURIComponent(eventId)}/investigate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                status: status,
+                notes: notes,
+                assigned_analyst: 'admin@sentinel.sec',
+                create_incident: false
+            })
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        toastr.success(`Investigation status updated to ${status}`);
+        loadSecurityEvents(threatCenterCurrentPage, false, true);
+    } catch (err) {
+        toastr.error(`Failed saving investigation: ${err.message}`);
+    }
+}
+
+async function escalateDrawerToIncident() {
+    if (!currentDrawerEvent) return;
+    const eventId = currentDrawerEvent.event_id;
+    const notes = document.getElementById('drawerInvestigationNotes')?.value || 'Analyst escalated from Live Threat Center';
+
+    try {
+        const res = await fetch(`/api/security/events/${encodeURIComponent(eventId)}/investigate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                status: 'ESCALATED',
+                notes: notes,
+                assigned_analyst: 'admin@sentinel.sec',
+                create_incident: true
+            })
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        toastr.success(`Incident created: ${data.incident_id || 'INC-ESCALATED'}`, 'Escalation Successful');
+        openEventDetailDrawer(eventId);
+        loadSecurityEvents(threatCenterCurrentPage, false, true);
+    } catch (err) {
+        toastr.error(`Escalation failed: ${err.message}`);
+    }
+}
+
+async function quarantineDrawerClientIp() {
+    if (!currentDrawerEvent || !currentDrawerEvent.client_ip) return;
+    const ip = currentDrawerEvent.client_ip;
+
+    try {
+        const res = await fetch('/api/security/blocklist/quarantine', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                client_ip: ip,
+                reason: `Manual quarantine triggered by SOC Analyst for event ${currentDrawerEvent.event_id}`,
+                ttl_seconds: 3600
+            })
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        toastr.warning(`Client IP ${ip} quarantined for 1 hour`, 'Quarantine Enforced');
+        lookupThreatIntelForIp(ip);
+        loadSecurityEvents(threatCenterCurrentPage, false, true);
+    } catch (err) {
+        toastr.error(`Quarantine failed: ${err.message}`);
+    }
+}
+
+function exportDrawerEventJson() {
+    if (!currentDrawerEvent) return;
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(currentDrawerEvent, null, 2));
+    const dlAnchor = document.createElement('a');
+    dlAnchor.setAttribute("href", dataStr);
+    dlAnchor.setAttribute("download", `event_${currentDrawerEvent.event_id || 'dossier'}.json`);
+    document.body.appendChild(dlAnchor);
+    dlAnchor.click();
+    dlAnchor.remove();
+    toastr.info(`Exported event dossier for ${currentDrawerEvent.event_id}`);
 }
 
 function copyDrawerRawJson() {
@@ -2576,6 +3310,18 @@ function copyDrawerRawJson() {
     }).catch(() => {
         toastr.info('Select and copy text directly from preview box.');
     });
+}
+
+function viewIncidentFromEvent(incidentId) {
+    closeEventDetailDrawer();
+    switchToTab('pageIncidents');
+    if (typeof loadIncidentsList === 'function') {
+        loadIncidentsList().then(() => {
+            if (typeof selectIncident === 'function') {
+                selectIncident(incidentId);
+            }
+        });
+    }
 }
 
 // =========================================================================
@@ -3056,7 +3802,7 @@ function renderFullEventsRows(events) {
             <td><code>${ev.path || '-'}</code></td>
             <td>${sevBadge}</td>
             <td>
-                <button class="btn btn-secondary btn-sm" onclick='openEventDetailDrawer(${JSON.stringify(ev)})'>
+                <button class="btn btn-secondary btn-sm" onclick="openEventDetailDrawer('${escapeHtml(ev.event_id || ev.id)}')">
                     <i class="fas fa-search"></i> Inspect
                 </button>
             </td>
