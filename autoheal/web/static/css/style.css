@@ -3611,5 +3611,1077 @@ code, pre, .terminal-text {
     color: var(--text-muted);
 }
 
+/* ==========================================================================
+   PHASE 6: VISUAL SOAR AUTOMATION BUILDER — OBSIDIAN SENTINEL DESIGN SYSTEM
+   ========================================================================== */
+
+/* Subnavigation Bar */
+.soar-subnav-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: #101722;
+    border: 1px solid #253344;
+    border-radius: var(--radius-md, 8px);
+    margin-bottom: 20px;
+    overflow-x: auto;
+}
+
+.soar-subnav-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm, 6px);
+    color: #94A3B8;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+}
+
+.soar-subnav-btn:hover {
+    background: rgba(37, 51, 68, 0.4);
+    color: #F1F5F9;
+}
+
+.soar-subnav-btn.active {
+    background: #151F2C;
+    border-color: #38BDF8;
+    color: #38BDF8;
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.15);
+}
+
+.soar-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 7px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    font-family: var(--font-mono, monospace);
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.15);
+    color: #94A3B8;
+}
+
+.soar-badge.badge-amber {
+    background: rgba(245, 158, 11, 0.2);
+    color: #F59E0B;
+    border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.soar-badge.badge-cyan {
+    background: rgba(56, 189, 248, 0.2);
+    color: #38BDF8;
+    border: 1px solid rgba(56, 189, 248, 0.4);
+}
+
+.soar-badge.badge-green {
+    background: rgba(34, 197, 94, 0.2);
+    color: #22C55E;
+    border: 1px solid rgba(34, 197, 94, 0.4);
+}
+
+.soar-badge.badge-purple {
+    background: rgba(167, 139, 250, 0.2);
+    color: #A78BFA;
+    border: 1px solid rgba(167, 139, 250, 0.4);
+}
+
+.soar-subview {
+    display: none;
+    animation: fadeIn 0.2s ease-in-out;
+}
+
+.soar-subview.active {
+    display: block;
+}
+
+/* SOAR KPI Metrics Grid */
+.soar-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+    margin-bottom: 20px;
+}
+
+.soar-kpi-card {
+    background: #101722;
+    border: 1px solid #253344;
+    border-radius: var(--radius-md, 8px);
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.soar-kpi-card:hover {
+    border-color: #38BDF8;
+    transform: translateY(-2px);
+}
+
+.soar-kpi-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    flex-shrink: 0;
+}
+
+.soar-kpi-val {
+    font-size: 1.5rem;
+    font-weight: 800;
+    font-family: var(--font-mono, monospace);
+    color: #F1F5F9;
+    line-height: 1.1;
+}
+
+.soar-kpi-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #94A3B8;
+    margin-top: 2px;
+}
+
+/* Playbooks Filter Toolbar */
+.soar-filter-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 16px;
+    background: #101722;
+    border: 1px solid #253344;
+    border-radius: var(--radius-md, 8px);
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+}
+
+.soar-filter-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.soar-search-input {
+    background: #151F2C;
+    border: 1px solid #253344;
+    border-radius: var(--radius-sm, 6px);
+    color: #F1F5F9;
+    padding: 7px 12px;
+    font-size: 0.82rem;
+    min-width: 240px;
+    outline: none;
+    transition: border-color 0.15s ease;
+}
+
+.soar-search-input:focus {
+    border-color: #38BDF8;
+}
+
+.soar-select-input {
+    background: #151F2C;
+    border: 1px solid #253344;
+    border-radius: var(--radius-sm, 6px);
+    color: #F1F5F9;
+    padding: 7px 12px;
+    font-size: 0.82rem;
+    outline: none;
+    cursor: pointer;
+}
+
+.soar-select-input:focus {
+    border-color: #38BDF8;
+}
+
+/* Playbook Cards Grid */
+.soar-playbooks-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: 18px;
+    margin-bottom: 24px;
+}
+
+.soar-playbook-card {
+    background: #101722;
+    border: 1px solid #253344;
+    border-radius: var(--radius-md, 8px);
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.soar-playbook-card:hover {
+    border-color: #38BDF8;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.soar-playbook-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: #253344;
+}
+
+.soar-playbook-card.published::before {
+    background: linear-gradient(90deg, #38BDF8, #22C55E);
+}
+
+.soar-playbook-card.draft::before {
+    background: #F59E0B;
+}
+
+.soar-playbook-card.disabled::before {
+    background: #64748B;
+}
+
+.soar-playbook-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.soar-playbook-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #F1F5F9;
+    margin: 0 0 4px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.soar-playbook-id-chip {
+    font-family: var(--font-mono, monospace);
+    font-size: 0.68rem;
+    padding: 2px 6px;
+    background: rgba(37, 51, 68, 0.6);
+    border-radius: 4px;
+    color: #94A3B8;
+}
+
+.soar-playbook-desc {
+    font-size: 0.82rem;
+    color: #94A3B8;
+    line-height: 1.45;
+    margin-bottom: 14px;
+    flex-grow: 1;
+}
+
+.soar-playbook-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 14px;
+}
+
+.soar-tag-chip {
+    font-size: 0.68rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: #151F2C;
+    border: 1px solid #253344;
+    color: #94A3B8;
+}
+
+.soar-playbook-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    background: #151F2C;
+    border: 1px solid #253344;
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 14px;
+    font-size: 0.75rem;
+}
+
+.soar-metric-col {
+    text-align: center;
+}
+
+.soar-metric-col .val {
+    font-family: var(--font-mono, monospace);
+    font-weight: 800;
+    color: #F1F5F9;
+    font-size: 0.95rem;
+}
+
+.soar-metric-col .lbl {
+    font-size: 0.65rem;
+    color: #94A3B8;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-top: 2px;
+}
+
+.soar-playbook-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    padding-top: 12px;
+    border-top: 1px solid #253344;
+}
+
+.soar-playbook-ver {
+    font-size: 0.72rem;
+    font-family: var(--font-mono, monospace);
+    color: #94A3B8;
+}
+
+.soar-card-btn-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* ==========================================================================
+   VISUAL WORKFLOW CANVAS & BUILDER WORKSPACE
+   ========================================================================== */
+
+.soar-builder-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 16px;
+    background: #101722;
+    border: 1px solid #253344;
+    border-radius: var(--radius-md, 8px) var(--radius-md, 8px) 0 0;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.soar-builder-title-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.soar-builder-title-group h3 {
+    margin: 0;
+    font-size: 1.05rem;
+    color: #F1F5F9;
+}
+
+.soar-builder-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.soar-builder-workspace {
+    display: flex;
+    height: 720px;
+    background: #090D14;
+    border: 1px solid #253344;
+    border-top: none;
+    border-radius: 0 0 var(--radius-md, 8px) var(--radius-md, 8px);
+    position: relative;
+    overflow: hidden;
+}
+
+/* Node Palette Sidebar */
+.soar-palette-sidebar {
+    width: 250px;
+    background: #101722;
+    border-right: 1px solid #253344;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    z-index: 10;
+}
+
+.soar-palette-header {
+    padding: 12px 14px;
+    border-bottom: 1px solid #253344;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #94A3B8;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.soar-palette-list {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.palette-category {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.palette-category-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: #94A3B8;
+    margin-bottom: 2px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.palette-node-item {
+    background: #151F2C;
+    border: 1px solid #253344;
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 0.78rem;
+    color: #F1F5F9;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: grab;
+    user-select: none;
+    transition: all 0.15s ease;
+}
+
+.palette-node-item:hover {
+    border-color: #38BDF8;
+    background: rgba(56, 189, 248, 0.08);
+    transform: translateX(2px);
+}
+
+.palette-node-item:active {
+    cursor: grabbing;
+}
+
+.palette-node-icon {
+    font-size: 1rem;
+    width: 20px;
+    text-align: center;
+}
+
+/* Canvas Viewport */
+.soar-canvas-container {
+    flex-grow: 1;
+    position: relative;
+    overflow: hidden;
+    background:
+        radial-gradient(circle, rgba(37, 51, 68, 0.35) 1px, transparent 1px) 0 0 / 24px 24px,
+        #090D14;
+    cursor: grab;
+}
+
+.soar-canvas-container:active {
+    cursor: grabbing;
+}
+
+.soar-canvas-viewport {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 5000px;
+    height: 5000px;
+    transform-origin: 0 0;
+    will-change: transform;
+}
+
+.soar-canvas-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.soar-canvas-svg path.soar-wire {
+    fill: none;
+    stroke: #64748B;
+    stroke-width: 2.5px;
+    transition: stroke 0.15s ease;
+    pointer-events: stroke;
+    cursor: pointer;
+}
+
+.soar-canvas-svg path.soar-wire:hover {
+    stroke: #EF4444;
+    stroke-width: 3.5px;
+}
+
+.soar-canvas-svg path.soar-wire.wire-active {
+    stroke: #38BDF8;
+    filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.5));
+}
+
+.soar-canvas-svg path.soar-wire.wire-true {
+    stroke: #22C55E;
+}
+
+.soar-canvas-svg path.soar-wire.wire-false {
+    stroke: #EF4444;
+}
+
+.soar-canvas-svg path.soar-wire.wire-approved {
+    stroke: #22C55E;
+}
+
+.soar-canvas-svg path.soar-wire.wire-rejected {
+    stroke: #F59E0B;
+}
+
+.soar-nodes-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 3;
+    pointer-events: auto;
+}
+
+/* Individual Node Card on Canvas */
+.soar-node-card {
+    position: absolute;
+    width: 230px;
+    background: #101722;
+    border: 1px solid #253344;
+    border-radius: 8px;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+    user-select: none;
+    cursor: move;
+    transition: box-shadow 0.15s ease, border-color 0.15s ease;
+    z-index: 4;
+}
+
+.soar-node-card:hover {
+    border-color: #38BDF8;
+}
+
+.soar-node-card.selected {
+    border-color: #38BDF8;
+    box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.35), 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+
+.soar-node-card.has-error {
+    border-color: #EF4444 !important;
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.4) !important;
+}
+
+.soar-node-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    background: #151F2C;
+    border-bottom: 1px solid #253344;
+    border-radius: 7px 7px 0 0;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #F1F5F9;
+}
+
+.soar-node-header-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.soar-node-category-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.cat-trigger { background: #38BDF8; }
+.cat-lookup { background: #818CF8; }
+.cat-condition { background: #F59E0B; }
+.cat-branch { background: #F59E0B; }
+.cat-approval { background: #A78BFA; }
+.cat-action { background: #EF4444; }
+.cat-verification { background: #22C55E; }
+
+.soar-node-body {
+    padding: 8px 10px;
+    font-size: 0.72rem;
+    color: #94A3B8;
+}
+
+.soar-node-type-label {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #64748B;
+    margin-bottom: 4px;
+}
+
+.soar-node-summary {
+    color: #CBD5E1;
+    line-height: 1.35;
+    word-break: break-word;
+}
+
+/* Port Handles */
+.soar-port {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #253344;
+    border: 2px solid #94A3B8;
+    cursor: crosshair;
+    transition: all 0.15s ease;
+    z-index: 6;
+}
+
+.soar-port:hover {
+    transform: scale(1.3);
+    border-color: #38BDF8;
+    background: #38BDF8;
+}
+
+.soar-port.port-input {
+    left: -6px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.soar-port.port-output {
+    right: -6px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.soar-port.port-output-true {
+    right: -6px;
+    top: 35%;
+    border-color: #22C55E;
+}
+
+.soar-port.port-output-false {
+    right: -6px;
+    top: 65%;
+    border-color: #EF4444;
+}
+
+.soar-port.port-output-approved {
+    right: -6px;
+    top: 35%;
+    border-color: #22C55E;
+}
+
+.soar-port.port-output-rejected {
+    right: -6px;
+    top: 65%;
+    border-color: #F59E0B;
+}
+
+.soar-port-label {
+    position: absolute;
+    font-size: 0.6rem;
+    font-weight: 700;
+    font-family: var(--font-mono, monospace);
+    color: #94A3B8;
+    pointer-events: none;
+}
+
+.label-true { right: 14px; top: 28%; color: #22C55E; }
+.label-false { right: 14px; top: 62%; color: #EF4444; }
+.label-approved { right: 14px; top: 28%; color: #22C55E; }
+.label-rejected { right: 14px; top: 62%; color: #F59E0B; }
+
+/* Minimap */
+.soar-minimap {
+    position: absolute;
+    bottom: 16px;
+    left: 16px;
+    width: 180px;
+    height: 120px;
+    background: rgba(16, 23, 34, 0.88);
+    border: 1px solid #253344;
+    border-radius: 6px;
+    backdrop-filter: blur(8px);
+    overflow: hidden;
+    z-index: 10;
+}
+
+.soar-minimap-canvas {
+    width: 100%;
+    height: 100%;
+}
+
+.soar-minimap-viewbox {
+    position: absolute;
+    border: 1.5px solid #38BDF8;
+    background: rgba(56, 189, 248, 0.15);
+    pointer-events: none;
+}
+
+/* Node Configuration Drawer */
+.soar-config-drawer {
+    width: 320px;
+    background: #101722;
+    border-left: 1px solid #253344;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    z-index: 10;
+    transition: width 0.2s ease;
+}
+
+.soar-config-drawer.collapsed {
+    width: 0;
+    display: none;
+}
+
+.soar-config-header {
+    padding: 12px 14px;
+    border-bottom: 1px solid #253344;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.soar-config-header h4 {
+    margin: 0;
+    font-size: 0.85rem;
+    color: #F1F5F9;
+}
+
+.soar-config-body {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.soar-config-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.soar-config-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: #94A3B8;
+}
+
+.soar-config-input,
+.soar-config-textarea,
+.soar-config-select {
+    background: #151F2C;
+    border: 1px solid #253344;
+    border-radius: 6px;
+    color: #F1F5F9;
+    padding: 8px 10px;
+    font-size: 0.78rem;
+    outline: none;
+    font-family: inherit;
+    transition: border-color 0.15s ease;
+}
+
+.soar-config-input:focus,
+.soar-config-textarea:focus,
+.soar-config-select:focus {
+    border-color: #38BDF8;
+}
+
+.soar-config-textarea {
+    resize: vertical;
+    min-height: 80px;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.75rem;
+}
+
+/* Accessible List View Alternate */
+.soar-accessible-view {
+    padding: 18px;
+    background: #101722;
+    border: 1px solid #253344;
+    border-radius: var(--radius-md, 8px);
+    margin-top: 14px;
+}
+
+.soar-accessible-node-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
+    background: #151F2C;
+    border: 1px solid #253344;
+    border-radius: 6px;
+    margin-bottom: 8px;
+}
+
+/* ==========================================================================
+   EXECUTION MONITOR & DRAWER
+   ========================================================================== */
+
+.soar-exec-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 18px;
+}
+
+.soar-table-container {
+    background: #101722;
+    border: 1px solid #253344;
+    border-radius: var(--radius-md, 8px);
+    overflow: hidden;
+}
+
+.soar-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+    color: #CBD5E1;
+}
+
+.soar-table th {
+    background: #151F2C;
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #94A3B8;
+    border-bottom: 1px solid #253344;
+}
+
+.soar-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(37, 51, 68, 0.4);
+}
+
+.soar-table tr:hover td {
+    background: rgba(37, 51, 68, 0.25);
+}
+
+.soar-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    font-family: var(--font-mono, monospace);
+    text-transform: uppercase;
+}
+
+.status-completed { background: rgba(34, 197, 94, 0.15); color: #22C55E; border: 1px solid rgba(34, 197, 94, 0.35); }
+.status-running { background: rgba(56, 189, 248, 0.15); color: #38BDF8; border: 1px solid rgba(56, 189, 248, 0.35); }
+.status-waiting { background: rgba(245, 158, 11, 0.15); color: #F59E0B; border: 1px solid rgba(245, 158, 11, 0.35); }
+.status-failed { background: rgba(239, 68, 68, 0.15); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.35); }
+.status-cancelled { background: rgba(148, 163, 184, 0.15); color: #94A3B8; border: 1px solid rgba(148, 163, 184, 0.35); }
+
+/* Execution Drawer Timeline */
+.soar-exec-drawer {
+    background: #101722;
+    border: 1px solid #253344;
+    border-radius: var(--radius-md, 8px);
+    padding: 18px;
+    margin-top: 18px;
+}
+
+.exec-timeline-stream {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    position: relative;
+    padding-left: 24px;
+    margin-top: 14px;
+}
+
+.exec-timeline-stream::before {
+    content: '';
+    position: absolute;
+    top: 6px;
+    bottom: 6px;
+    left: 8px;
+    width: 2px;
+    background: #253344;
+}
+
+.exec-node-item {
+    background: #151F2C;
+    border: 1px solid #253344;
+    border-radius: 6px;
+    padding: 10px 14px;
+    position: relative;
+}
+
+.exec-node-item::before {
+    content: '';
+    position: absolute;
+    left: -20px;
+    top: 14px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #64748B;
+    border: 2px solid #101722;
+}
+
+.exec-node-item.node-completed::before { background: #22C55E; }
+.exec-node-item.node-running::before { background: #38BDF8; box-shadow: 0 0 8px #38BDF8; }
+.exec-node-item.node-waiting::before { background: #F59E0B; }
+.exec-node-item.node-failed::before { background: #EF4444; }
+
+.exec-node-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.exec-node-title {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #F1F5F9;
+}
+
+.exec-node-details {
+    background: #090D14;
+    border: 1px solid #253344;
+    border-radius: 4px;
+    padding: 8px 10px;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.72rem;
+    color: #94A3B8;
+    max-height: 180px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+}
+
+/* ==========================================================================
+   APPROVAL CENTER & CARDS
+   ========================================================================== */
+
+.soar-approval-header-card {
+    background: linear-gradient(135deg, rgba(167, 139, 250, 0.12), rgba(16, 23, 34, 0.95));
+    border: 1px solid rgba(167, 139, 250, 0.35);
+    border-radius: var(--radius-md, 8px);
+    padding: 16px 20px;
+    margin-bottom: 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.soar-approvals-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.soar-approval-card {
+    background: #101722;
+    border: 1px solid #253344;
+    border-radius: var(--radius-md, 8px);
+    padding: 18px;
+    border-left: 4px solid #F59E0B;
+}
+
+.soar-approval-card.pending {
+    border-left-color: #F59E0B;
+}
+
+.soar-approval-card.approved {
+    border-left-color: #22C55E;
+}
+
+.soar-approval-card.rejected {
+    border-left-color: #EF4444;
+}
+
+.soar-approval-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.soar-approval-action-summary {
+    background: #151F2C;
+    border: 1px solid #253344;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 10px 0 14px 0;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.78rem;
+    color: #F1F5F9;
+}
+
+.soar-approval-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+/* Validation Result Items */
+.soar-validation-error-item {
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 0.78rem;
+    color: #FCA5A5;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.soar-validation-warning-item {
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 0.78rem;
+    color: #FCD34D;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+
 
 

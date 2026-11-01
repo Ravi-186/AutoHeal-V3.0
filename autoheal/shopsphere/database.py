@@ -356,6 +356,127 @@ def init_db():
         );
         """)
 
+        # 16. SOAR Playbooks Registry Table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS soar_playbooks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            playbook_id TEXT UNIQUE NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL,
+            category TEXT NOT NULL DEFAULT 'INJECTION',
+            status TEXT NOT NULL DEFAULT 'DRAFT',
+            current_version INTEGER NOT NULL DEFAULT 1,
+            trigger_type TEXT NOT NULL DEFAULT 'NEW_INCIDENT',
+            trigger_config_json TEXT DEFAULT '{}',
+            owner TEXT NOT NULL DEFAULT 'admin@sentinel.sec',
+            required_permissions TEXT DEFAULT '["soc:analyst"]',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+
+        # 17. SOAR Playbook Versions & Canvas Graphs Table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS soar_playbook_versions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            playbook_id TEXT NOT NULL,
+            version INTEGER NOT NULL,
+            nodes_json TEXT NOT NULL DEFAULT '[]',
+            edges_json TEXT NOT NULL DEFAULT '[]',
+            viewport_json TEXT DEFAULT '{"x":0,"y":0,"zoom":1}',
+            is_published INTEGER NOT NULL DEFAULT 0,
+            validation_hash TEXT,
+            change_summary TEXT DEFAULT '',
+            created_by TEXT NOT NULL DEFAULT 'admin@sentinel.sec',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (playbook_id) REFERENCES soar_playbooks(playbook_id) ON DELETE CASCADE,
+            UNIQUE(playbook_id, version)
+        );
+        """)
+
+        # 18. SOAR Workflow Executions Table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS soar_executions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            execution_id TEXT UNIQUE NOT NULL,
+            playbook_id TEXT NOT NULL,
+            playbook_version INTEGER NOT NULL,
+            playbook_name TEXT NOT NULL,
+            trigger_source TEXT NOT NULL DEFAULT 'MANUAL',
+            incident_id TEXT,
+            event_id TEXT,
+            simulation_id TEXT,
+            execution_mode TEXT NOT NULL DEFAULT 'LIVE',
+            status TEXT NOT NULL DEFAULT 'QUEUED',
+            current_node_id TEXT,
+            context_json TEXT DEFAULT '{}',
+            verification_status TEXT DEFAULT 'PENDING',
+            started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            completed_at TIMESTAMP,
+            duration_ms REAL DEFAULT 0.0,
+            triggered_by TEXT NOT NULL DEFAULT 'admin@sentinel.sec',
+            error_message TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+
+        # 19. SOAR Node-Level Execution Telemetry Table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS soar_node_executions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            execution_id TEXT NOT NULL,
+            node_id TEXT NOT NULL,
+            node_type TEXT NOT NULL,
+            node_name TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'PENDING',
+            input_json TEXT DEFAULT '{}',
+            output_json TEXT DEFAULT '{}',
+            error_message TEXT,
+            retry_count INTEGER NOT NULL DEFAULT 0,
+            started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            completed_at TIMESTAMP,
+            duration_ms REAL DEFAULT 0.0,
+            FOREIGN KEY (execution_id) REFERENCES soar_executions(execution_id) ON DELETE CASCADE
+        );
+        """)
+
+        # 20. SOAR Human-in-the-Loop Approval Queue Table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS soar_approvals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            approval_id TEXT UNIQUE NOT NULL,
+            execution_id TEXT NOT NULL,
+            node_id TEXT NOT NULL,
+            playbook_id TEXT NOT NULL,
+            action_type TEXT NOT NULL,
+            action_target TEXT NOT NULL,
+            action_description TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'PENDING',
+            requested_by TEXT NOT NULL DEFAULT 'System',
+            decided_by TEXT,
+            reason TEXT,
+            decision_token TEXT UNIQUE NOT NULL,
+            incident_id TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            decided_at TIMESTAMP
+        );
+        """)
+
+        # 21. SOAR Immutable Security Audit Logs Table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS soar_audit_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            log_id TEXT UNIQUE NOT NULL,
+            action_type TEXT NOT NULL,
+            playbook_id TEXT,
+            execution_id TEXT,
+            actor TEXT NOT NULL DEFAULT 'admin@sentinel.sec',
+            details_json TEXT DEFAULT '{}',
+            ip_address TEXT DEFAULT '127.0.0.1',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+
         # Enterprise Database Performance Indexes
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_blocked_clients_ip_active ON blocked_clients (client_ip, is_active, expires_at);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_security_events_temporal ON security_events (client_ip, timestamp);")
@@ -376,6 +497,17 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_orders_customer_email ON orders (customer_email, created_at DESC);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_cart_items_user ON cart_items (user_or_session_id);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_wishlist_user ON wishlist (user_or_session_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_soar_playbooks_status ON soar_playbooks (status, category);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_soar_playbooks_trigger ON soar_playbooks (trigger_type);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_soar_versions_playbook ON soar_playbook_versions (playbook_id, version DESC);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_soar_executions_status ON soar_executions (status, created_at DESC);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_soar_executions_playbook ON soar_executions (playbook_id, playbook_version);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_soar_executions_incident ON soar_executions (incident_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_soar_node_executions_exec ON soar_node_executions (execution_id, node_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_soar_approvals_status ON soar_approvals (status, created_at DESC);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_soar_approvals_exec ON soar_approvals (execution_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_soar_audit_logs_action ON soar_audit_logs (action_type, created_at DESC);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_soar_audit_logs_playbook ON soar_audit_logs (playbook_id);")
 
         conn.commit()
 

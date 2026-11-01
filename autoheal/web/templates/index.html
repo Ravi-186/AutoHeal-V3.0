@@ -1984,85 +1984,525 @@
                 </section>
 
                 <!-- ===================================================================
-                     MODULE 5: SOAR AUTOMATION CENTER
+                     MODULE 5: ENTERPRISE SOAR AUTOMATION CENTER (PHASE 6)
                      =================================================================== -->
                 <section id="pageSoar" class="workspace-page">
+                    <!-- SOAR Header Ribbon & Subview Switcher -->
                     <div class="page-header-ribbon">
                         <div>
-                            <h2><i class="fas fa-robot" style="color: var(--primary);"></i> SOAR Automation Console</h2>
-                            <p>Visual playbooks, automated incident response triggers, and real-time quarantine enforcement</p>
+                            <h2><i class="fas fa-robot" style="color: var(--primary);"></i> SOAR Automation Center</h2>
+                            <p>Visual playbook orchestration, human-in-the-loop approvals, autonomous containment, and verified self-healing</p>
+                        </div>
+                        <div class="header-actions-group">
+                            <div class="soar-subnav-pills" role="tablist">
+                                <button type="button" class="soar-subnav-btn active" id="btnSoarNavLibrary" onclick="switchSoarSubview('library')">
+                                    <i class="fas fa-book"></i> Playbook Library
+                                </button>
+                                <button type="button" class="soar-subnav-btn" id="btnSoarNavBuilder" onclick="switchSoarSubview('builder')">
+                                    <i class="fas fa-diagram-project"></i> Visual Builder
+                                </button>
+                                <button type="button" class="soar-subnav-btn" id="btnSoarNavMonitor" onclick="switchSoarSubview('monitor')">
+                                    <i class="fas fa-tv"></i> Execution Monitor
+                                </button>
+                                <button type="button" class="soar-subnav-btn" id="btnSoarNavApprovals" onclick="switchSoarSubview('approvals')">
+                                    <i class="fas fa-user-check"></i> Approval Center <span class="badge badge-warning" id="soarPendingApprovalsBadge">0</span>
+                                </button>
+                                <button type="button" class="soar-subnav-btn" id="btnSoarNavAudit" onclick="switchSoarSubview('audit')">
+                                    <i class="fas fa-list-check"></i> Audit History
+                                </button>
+                                <button type="button" class="soar-subnav-btn" id="btnSoarNavQuarantine" onclick="switchSoarSubview('quarantine')">
+                                    <i class="fas fa-user-slash"></i> Quarantines
+                                </button>
+                            </div>
+                            <button type="button" class="btn btn-primary" onclick="openCreatePlaybookModal()">
+                                <i class="fas fa-plus"></i> New Playbook
+                            </button>
                         </div>
                     </div>
 
-                    <!-- Visual Playbook Flowchart -->
-                    <div class="soc-card">
-                        <div class="soc-card-header">
-                            <h3><i class="fas fa-diagram-project" style="color: var(--accent-cyan);"></i> Active Playbook Flow: Autonomous Threat Quarantine &amp; Healing</h3>
-                            <span class="badge badge-success">ACTIVE &amp; ENFORCING</span>
+                    <!-- ===========================================================
+                         SUBVIEW 1: PLAYBOOK LIBRARY
+                         =========================================================== -->
+                    <div id="soarSubviewLibrary" class="soar-subview active">
+                        <!-- 6 SOAR Operational KPI Cards -->
+                        <div class="soar-kpi-grid">
+                            <div class="soar-kpi-card">
+                                <div class="soar-kpi-icon" style="background: rgba(56, 189, 248, 0.12); color: #38bdf8;"><i class="fas fa-book-bookmark"></i></div>
+                                <div class="soar-kpi-meta">
+                                    <span class="soar-kpi-label">Total Playbooks</span>
+                                    <span class="soar-kpi-value" id="soarKpiTotalPlaybooks">-</span>
+                                </div>
+                            </div>
+                            <div class="soar-kpi-card">
+                                <div class="soar-kpi-icon" style="background: rgba(34, 197, 94, 0.12); color: #22c55e;"><i class="fas fa-circle-check"></i></div>
+                                <div class="soar-kpi-meta">
+                                    <span class="soar-kpi-label">Active Published</span>
+                                    <span class="soar-kpi-value" id="soarKpiPublishedPlaybooks">-</span>
+                                </div>
+                            </div>
+                            <div class="soar-kpi-card">
+                                <div class="soar-kpi-icon" style="background: rgba(167, 139, 250, 0.12); color: #a78bfa;"><i class="fas fa-bolt"></i></div>
+                                <div class="soar-kpi-meta">
+                                    <span class="soar-kpi-label">Total Executions</span>
+                                    <span class="soar-kpi-value" id="soarKpiTotalExecutions">-</span>
+                                </div>
+                            </div>
+                            <div class="soar-kpi-card">
+                                <div class="soar-kpi-icon" style="background: rgba(16, 185, 129, 0.12); color: #10b981;"><i class="fas fa-percent"></i></div>
+                                <div class="soar-kpi-meta">
+                                    <span class="soar-kpi-label">Success Rate</span>
+                                    <span class="soar-kpi-value" id="soarKpiSuccessRate">-</span>
+                                </div>
+                            </div>
+                            <div class="soar-kpi-card">
+                                <div class="soar-kpi-icon" style="background: rgba(245, 158, 11, 0.12); color: #f59e0b;"><i class="fas fa-user-clock"></i></div>
+                                <div class="soar-kpi-meta">
+                                    <span class="soar-kpi-label">Pending Approvals</span>
+                                    <span class="soar-kpi-value" id="soarKpiPendingApprovals">-</span>
+                                </div>
+                            </div>
+                            <div class="soar-kpi-card">
+                                <div class="soar-kpi-icon" style="background: rgba(239, 68, 68, 0.12); color: #ef4444;"><i class="fas fa-shield-halved"></i></div>
+                                <div class="soar-kpi-meta">
+                                    <span class="soar-kpi-label">Actions Enforced</span>
+                                    <span class="soar-kpi-value" id="soarKpiActionsEnforced">-</span>
+                                </div>
+                            </div>
                         </div>
-                        <div class="soc-card-body">
-                            <div class="soar-flowchart">
-                                <div class="soar-node node-trigger">
-                                    <div class="soar-node-icon"><i class="fas fa-bell"></i></div>
-                                    <div class="soar-node-label">1. Ingress Telemetry</div>
-                                    <div class="soar-node-sub">HTTP Request Ingest</div>
+
+                        <!-- Multi-Parametric Filter Toolbar -->
+                        <div class="soar-filter-toolbar">
+                            <div class="toolbar-left-group">
+                                <div class="search-input-wrap">
+                                    <i class="fas fa-search search-icon"></i>
+                                    <input type="text" id="soarSearchInput" class="soc-input" placeholder="Search playbooks by name, ID or description..." oninput="handleSoarSearchChange(this.value)">
                                 </div>
-                                <div class="soar-arrow"><i class="fas fa-arrow-right"></i></div>
-                                <div class="soar-node node-detect">
-                                    <div class="soar-node-icon"><i class="fas fa-magnifying-glass-chart"></i></div>
-                                    <div class="soar-node-label">2. ML &amp; Rule Engine</div>
-                                    <div class="soar-node-sub">Anomaly &amp; Signature</div>
+                                <div class="filter-select-wrap">
+                                    <label class="filter-select-label" for="soarCategoryFilter">Category:</label>
+                                    <select id="soarCategoryFilter" class="soc-select" onchange="handleSoarFilterChange()">
+                                        <option value="ALL">All Categories</option>
+                                        <option value="INJECTION">Injection Defense</option>
+                                        <option value="AUTHENTICATION">Authentication &amp; Sessions</option>
+                                        <option value="RATE_LIMIT">Rate-Limiting &amp; DoS</option>
+                                        <option value="MALWARE">Malware &amp; Payloads</option>
+                                        <option value="EXFILTRATION">Exfiltration Defense</option>
+                                        <option value="SYSTEM">System &amp; Baseline</option>
+                                    </select>
                                 </div>
-                                <div class="soar-arrow"><i class="fas fa-arrow-right"></i></div>
-                                <div class="soar-node node-quarantine">
-                                    <div class="soar-node-icon"><i class="fas fa-ban"></i></div>
-                                    <div class="soar-node-label">3. Dynamic Quarantine</div>
-                                    <div class="soar-node-sub">Offender IP Blocked</div>
+                                <div class="filter-select-wrap">
+                                    <label class="filter-select-label" for="soarStatusFilter">Status:</label>
+                                    <select id="soarStatusFilter" class="soc-select" onchange="handleSoarFilterChange()">
+                                        <option value="ALL">All Statuses</option>
+                                        <option value="PUBLISHED">Published (Active)</option>
+                                        <option value="DRAFT">Draft</option>
+                                        <option value="DISABLED">Disabled</option>
+                                    </select>
                                 </div>
-                                <div class="soar-arrow"><i class="fas fa-arrow-right"></i></div>
-                                <div class="soar-node node-patch">
-                                    <div class="soar-node-icon"><i class="fas fa-code-commit"></i></div>
-                                    <div class="soar-node-label">4. AST Self-Healing</div>
-                                    <div class="soar-node-sub">Surgical Code Patch</div>
+                                <div class="filter-select-wrap">
+                                    <label class="filter-select-label" for="soarSortSelect">Sort By:</label>
+                                    <select id="soarSortSelect" class="soc-select" onchange="handleSoarFilterChange()">
+                                        <option value="updated_at:desc">Recently Updated</option>
+                                        <option value="name:asc">Name (A-Z)</option>
+                                        <option value="executions:desc">Most Executed</option>
+                                        <option value="status:asc">Status</option>
+                                    </select>
                                 </div>
-                                <div class="soar-arrow"><i class="fas fa-arrow-right"></i></div>
-                                <div class="soar-node node-verify">
-                                    <div class="soar-node-icon"><i class="fas fa-check-double"></i></div>
-                                    <div class="soar-node-label">5. Dual-Probe Verification</div>
-                                    <div class="soar-node-sub">Attacker 403 / Benign 200</div>
+                            </div>
+                            <div class="toolbar-right-group">
+                                <div class="view-toggle-group">
+                                    <button type="button" class="btn btn-ghost btn-sm active" id="btnSoarViewGrid" onclick="setSoarViewMode('grid')" title="Card Grid View">
+                                        <i class="fas fa-grip"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-ghost btn-sm" id="btnSoarViewTable" onclick="setSoarViewMode('table')" title="Dense Table View">
+                                        <i class="fas fa-table-list"></i>
+                                    </button>
+                                </div>
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="loadSoarPlaybooks()">
+                                    <i class="fas fa-sync-alt"></i> Refresh
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Playbooks Grid Container -->
+                        <div id="soarPlaybooksGrid" class="soar-playbooks-grid">
+                            <!-- Injected dynamically via script.js -->
+                        </div>
+
+                        <!-- Playbooks Table Container (Hidden by default) -->
+                        <div id="soarPlaybooksTableWrapper" class="soc-table-wrapper" style="display: none;">
+                            <table class="soc-table">
+                                <thead>
+                                    <tr>
+                                        <th>Playbook ID</th>
+                                        <th>Name &amp; Description</th>
+                                        <th>Category</th>
+                                        <th>Status</th>
+                                        <th>Version</th>
+                                        <th>Trigger Type</th>
+                                        <th>Executions</th>
+                                        <th>Success Rate</th>
+                                        <th>Last Executed</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="soarPlaybooksTableBody">
+                                    <!-- Injected dynamically -->
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Server-Side Pagination Bar -->
+                        <div class="soar-pagination-bar">
+                            <span class="pagination-info" id="soarPaginationInfo">Showing 0-0 of 0 playbooks</span>
+                            <div class="pagination-controls">
+                                <button type="button" class="btn btn-secondary btn-sm" id="btnSoarPagePrev" onclick="navigateSoarPage(-1)" disabled>
+                                    <i class="fas fa-chevron-left"></i> Previous
+                                </button>
+                                <span class="page-indicator" id="soarCurrentPageIndicator">Page 1 of 1</span>
+                                <button type="button" class="btn btn-secondary btn-sm" id="btnSoarPageNext" onclick="navigateSoarPage(1)" disabled>
+                                    Next <i class="fas fa-chevron-right"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ===========================================================
+                         SUBVIEW 2: VISUAL WORKFLOW CANVAS BUILDER
+                         =========================================================== -->
+                    <div id="soarSubviewBuilder" class="soar-subview" style="display: none;">
+                        <!-- Builder Sticky Header Toolbar -->
+                        <div class="soar-builder-toolbar">
+                            <div class="builder-meta-group">
+                                <button type="button" class="btn btn-ghost btn-sm" onclick="switchSoarSubview('library')" title="Back to Library">
+                                    <i class="fas fa-arrow-left"></i>
+                                </button>
+                                <div>
+                                    <div class="builder-title-row">
+                                        <h3 id="soarBuilderPlaybookName">SQL Injection Autonomous Quarantine</h3>
+                                        <span class="badge badge-success" id="soarBuilderStatusBadge">PUBLISHED</span>
+                                        <span class="font-mono text-secondary" id="soarBuilderPlaybookId" style="font-size: 11px;">PB-SQLI-CONTAINMENT</span>
+                                    </div>
+                                    <div class="builder-sub-meta">
+                                        <span>Version:</span>
+                                        <select id="soarBuilderVersionSelect" class="soc-select soc-select-sm" onchange="handleSoarVersionSwitch(this.value)">
+                                            <option value="1">v1 (Published)</option>
+                                        </select>
+                                        <span class="separator">&bull;</span>
+                                        <span id="soarBuilderNodeCount">8 Nodes</span>
+                                        <span class="separator">&bull;</span>
+                                        <span id="soarBuilderEdgeCount">7 Connections</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="builder-actions-group">
+                                <button type="button" class="btn btn-ghost btn-sm" onclick="soarCanvasAutoLayout()" title="Auto-Arrange Layout">
+                                    <i class="fas fa-sitemap"></i> Layout
+                                </button>
+                                <button type="button" class="btn btn-ghost btn-sm" onclick="soarCanvasFitView()" title="Fit to Screen">
+                                    <i class="fas fa-expand"></i> Fit
+                                </button>
+                                <div class="zoom-btn-group">
+                                    <button type="button" class="btn btn-ghost btn-sm" onclick="soarCanvasZoom(-0.1)" title="Zoom Out"><i class="fas fa-minus"></i></button>
+                                    <span class="zoom-indicator" id="soarZoomLevel">100%</span>
+                                    <button type="button" class="btn btn-ghost btn-sm" onclick="soarCanvasZoom(0.1)" title="Zoom In"><i class="fas fa-plus"></i></button>
+                                </div>
+                                <div class="separator-v"></div>
+                                <button type="button" class="btn btn-ghost btn-sm" onclick="soarCanvasUndo()" title="Undo (Ctrl+Z)"><i class="fas fa-undo"></i></button>
+                                <button type="button" class="btn btn-ghost btn-sm" onclick="soarCanvasRedo()" title="Redo (Ctrl+Y)"><i class="fas fa-redo"></i></button>
+                                <div class="separator-v"></div>
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="validateCurrentWorkflow()" title="Validate Workflow DAG">
+                                    <i class="fas fa-check-double"></i> Validate
+                                </button>
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="dryRunCurrentWorkflow()" title="Simulate Dry-Run">
+                                    <i class="fas fa-vial"></i> Dry-Run
+                                </button>
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="saveWorkflowDraft()" title="Save Draft">
+                                    <i class="fas fa-floppy-disk"></i> Save Draft
+                                </button>
+                                <button type="button" class="btn btn-primary btn-sm" onclick="publishCurrentWorkflow()" title="Publish to Production">
+                                    <i class="fas fa-paper-plane"></i> Publish
+                                </button>
+                                <div class="separator-v"></div>
+                                <button type="button" class="btn btn-ghost btn-sm" id="btnSoarToggleAccess" onclick="toggleAccessibleNodeList()" title="Keyboard Accessible List Mode">
+                                    <i class="fas fa-universal-access"></i> List Mode
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Builder Work Area (Palette + Canvas + Config Drawer) -->
+                        <div class="soar-builder-workspace">
+                            <!-- Left: Node Palette Drawer -->
+                            <aside class="soar-node-palette" id="soarNodePalette">
+                                <div class="palette-header">
+                                    <h4><i class="fas fa-cubes-stacked"></i> Node Library</h4>
+                                    <input type="text" id="soarPaletteSearch" class="soc-input soc-input-sm" placeholder="Filter node types..." oninput="filterSoarPalette(this.value)">
+                                </div>
+                                <div class="palette-scroll" id="soarPaletteContainer">
+                                    <!-- Populated dynamically via script.js -->
+                                </div>
+                            </aside>
+
+                            <!-- Center: Interactive Workflow Canvas -->
+                            <div class="soar-canvas-viewport" id="soarCanvasViewport" tabindex="0" role="region" aria-label="Visual SOAR Workflow Editor">
+                                <!-- SVG Connections Layer -->
+                                <svg class="soar-canvas-svg" id="soarCanvasSvg">
+                                    <defs>
+                                        <pattern id="canvasGrid" width="24" height="24" patternUnits="userSpaceOnUse">
+                                            <circle cx="2" cy="2" r="1" fill="#253344" opacity="0.6" />
+                                        </pattern>
+                                        <marker id="arrowMarker" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                                            <path d="M 0 1 L 10 5 L 0 9 z" fill="#38bdf8" />
+                                        </marker>
+                                        <marker id="arrowApproved" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                                            <path d="M 0 1 L 10 5 L 0 9 z" fill="#22c55e" />
+                                        </marker>
+                                        <marker id="arrowRejected" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                                            <path d="M 0 1 L 10 5 L 0 9 z" fill="#ef4444" />
+                                        </marker>
+                                    </defs>
+                                    <rect width="100%" height="100%" fill="url(#canvasGrid)" />
+                                    <g id="soarSvgEdgesGroup"></g>
+                                    <!-- Active drag wire -->
+                                    <path id="soarDraftEdge" d="" stroke="#38bdf8" stroke-width="2" stroke-dasharray="4,4" fill="none" style="display:none;" />
+                                </svg>
+
+                                <!-- Draggable HTML Nodes Container -->
+                                <div class="soar-nodes-layer" id="soarNodesLayer">
+                                    <!-- Rendered dynamically -->
+                                </div>
+
+                                <!-- Minimap Overlay -->
+                                <div class="soar-minimap" id="soarMinimap" title="Workflow Overview Minimap">
+                                    <canvas id="soarMinimapCanvas" width="160" height="100"></canvas>
+                                    <div class="minimap-view-rect" id="soarMinimapRect"></div>
+                                </div>
+
+                                <!-- Keyboard Navigation Guide Overlay -->
+                                <div class="canvas-help-pill">
+                                    <span><i class="fas fa-keyboard"></i> Canvas: Drag to pan &bull; Scroll to zoom &bull; Click node to configure &bull; Drag handles to connect</span>
+                                </div>
+                            </div>
+
+                            <!-- Right: Contextual Node Configuration Drawer -->
+                            <aside class="soar-config-drawer" id="soarNodeConfigDrawer" style="display: none;">
+                                <div class="config-drawer-header">
+                                    <div class="config-header-meta">
+                                        <span class="node-category-tag" id="configDrawerCategory">ACTION</span>
+                                        <h4 id="configDrawerNodeName">Dynamic IP Quarantine</h4>
+                                    </div>
+                                    <button type="button" class="btn btn-ghost btn-sm" onclick="closeNodeConfigDrawer()"><i class="fas fa-times"></i></button>
+                                </div>
+                                <div class="config-drawer-body" id="configDrawerForm">
+                                    <!-- Form fields dynamically rendered -->
+                                </div>
+                                <div class="config-drawer-footer">
+                                    <button type="button" class="btn btn-danger btn-sm" onclick="deleteSelectedNode()">
+                                        <i class="fas fa-trash-can"></i> Delete Node
+                                    </button>
+                                    <button type="button" class="btn btn-primary btn-sm" onclick="saveSelectedNodeConfig()">
+                                        <i class="fas fa-check"></i> Apply Config
+                                    </button>
+                                </div>
+                            </aside>
+
+                            <!-- Alternative Accessible Structured Node List View (WCAG 2.2 AA) -->
+                            <div class="soar-accessible-view" id="soarAccessibleListView" style="display: none;">
+                                <div class="accessible-view-header">
+                                    <h4><i class="fas fa-list-ol"></i> Accessible Structured Workflow Execution List</h4>
+                                    <p>Screen-reader accessible table of execution sequence, parameters, branch routing, and conditions.</p>
+                                </div>
+                                <div class="soc-table-wrapper">
+                                    <table class="soc-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Step #</th>
+                                                <th>Node ID</th>
+                                                <th>Node Name</th>
+                                                <th>Category</th>
+                                                <th>Key Parameters</th>
+                                                <th>Outbound Connections</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="soarAccessibleTableBody">
+                                            <!-- Injected dynamically -->
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Active Quarantined Clients Table -->
-                    <div class="soc-card">
-                        <div class="soc-card-header">
-                            <h3><i class="fas fa-user-slash" style="color: var(--status-danger);"></i> Dynamic IP Quarantine Registry</h3>
-                            <button class="btn btn-secondary btn-sm" onclick="unblockAllClients()">
-                                <i class="fas fa-unlock"></i> Unblock All IPs
-                            </button>
+                    <!-- ===========================================================
+                         SUBVIEW 3: EXECUTION MONITOR
+                         =========================================================== -->
+                    <div id="soarSubviewMonitor" class="soar-subview" style="display: none;">
+                        <div class="soar-filter-toolbar">
+                            <div class="toolbar-left-group">
+                                <div class="filter-select-wrap">
+                                    <label class="filter-select-label" for="soarExecStatusFilter">Status:</label>
+                                    <select id="soarExecStatusFilter" class="soc-select" onchange="loadSoarExecutions()">
+                                        <option value="ALL">All Statuses</option>
+                                        <option value="RUNNING">Running</option>
+                                        <option value="WAITING_FOR_APPROVAL">Waiting Approval</option>
+                                        <option value="COMPLETED">Completed</option>
+                                        <option value="FAILED">Failed</option>
+                                        <option value="CANCELLED">Cancelled</option>
+                                    </select>
+                                </div>
+                                <div class="filter-select-wrap">
+                                    <label class="filter-select-label" for="soarExecModeFilter">Mode:</label>
+                                    <select id="soarExecModeFilter" class="soc-select" onchange="loadSoarExecutions()">
+                                        <option value="ALL">All Modes</option>
+                                        <option value="LIVE">Live Production</option>
+                                        <option value="DRY_RUN">Dry-Run Simulation</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="toolbar-right-group">
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="loadSoarExecutions()">
+                                    <i class="fas fa-sync-alt"></i> Refresh Stream
+                                </button>
+                            </div>
                         </div>
+
+                        <!-- Executions Stream Table -->
                         <div class="soc-table-wrapper">
                             <table class="soc-table">
                                 <thead>
                                     <tr>
-                                        <th>Client IP</th>
-                                        <th>Reason</th>
-                                        <th>Blocked At</th>
-                                        <th>Expires At</th>
-                                        <th>Violation Count</th>
-                                        <th>Action</th>
+                                        <th>Execution ID</th>
+                                        <th>Playbook Name</th>
+                                        <th>Trigger Source</th>
+                                        <th>Target Incident</th>
+                                        <th>Mode</th>
+                                        <th>Status</th>
+                                        <th>Verification</th>
+                                        <th>Started At</th>
+                                        <th>Duration</th>
+                                        <th>Actions</th>
                                     </tr>
                                 </thead>
-                                <tbody id="quarantinedClientsTableBody">
-                                    <tr>
-                                        <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 20px;">
-                                            No active client quarantines in effect. Perimeter is clear.
-                                        </td>
-                                    </tr>
+                                <tbody id="soarExecutionsTableBody">
+                                    <!-- Injected dynamically -->
                                 </tbody>
                             </table>
+                        </div>
+
+                        <!-- Execution Detail Slide-Over Drawer -->
+                        <div class="soar-exec-drawer" id="soarExecutionDetailDrawer" style="display: none;">
+                            <div class="exec-drawer-header">
+                                <div>
+                                    <span class="badge badge-info" id="drawerExecStatusBadge">RUNNING</span>
+                                    <h3 id="drawerExecId" class="font-mono" style="margin-top: 4px;">EXEC-20261101-ABCD</h3>
+                                    <div style="font-size: 11px; color: var(--text-secondary);">
+                                        <span id="drawerExecPlaybookName">Playbook</span> &bull; 
+                                        <span id="drawerExecDuration">0ms</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <button type="button" class="btn btn-danger btn-sm" id="btnDrawerCancelExec" onclick="cancelDrawerExecution()" style="display:none;">
+                                        <i class="fas fa-ban"></i> Cancel Run
+                                    </button>
+                                    <button type="button" class="btn btn-ghost btn-sm" onclick="closeExecutionDetailDrawer()"><i class="fas fa-times"></i></button>
+                                </div>
+                            </div>
+                            <div class="exec-drawer-body">
+                                <!-- Execution Nodes Timeline Visualizer -->
+                                <h4 class="pane-subheading"><i class="fas fa-timeline" style="color: var(--accent-cyan);"></i> Traversal Timeline</h4>
+                                <div class="exec-timeline-stream" id="drawerExecTimelineStream">
+                                    <!-- Step cards injected here -->
+                                </div>
+
+                                <!-- Node Telemetry Inspector -->
+                                <h4 class="pane-subheading" style="margin-top: 20px;"><i class="fas fa-code" style="color: var(--primary);"></i> Execution Context &amp; Outputs</h4>
+                                <pre class="drawer-raw-pre" id="drawerExecContextJson" style="max-height: 240px;">// Telemetry will appear here...</pre>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ===========================================================
+                         SUBVIEW 4: APPROVAL CENTER
+                         =========================================================== -->
+                    <div id="soarSubviewApprovals" class="soar-subview" style="display: none;">
+                        <div class="soar-approval-header-card">
+                            <div class="approval-header-icon"><i class="fas fa-user-shield"></i></div>
+                            <div>
+                                <h3>Human-in-the-Loop Security Approval Queue</h3>
+                                <p>Privileged containment actions (account termination, perimeter IP isolation, AST code patches) require human authorization.</p>
+                            </div>
+                        </div>
+
+                        <div id="soarPendingApprovalsContainer" class="soar-approvals-grid">
+                            <!-- Injected dynamically -->
+                        </div>
+                    </div>
+
+                    <!-- ===========================================================
+                         SUBVIEW 5: AUTOMATION AUDIT LOG
+                         =========================================================== -->
+                    <div id="soarSubviewAudit" class="soar-subview" style="display: none;">
+                        <div class="soc-card">
+                            <div class="soc-card-header">
+                                <h3><i class="fas fa-clock-rotate-left" style="color: var(--accent-purple);"></i> Immutable SOAR Security Audit Trail</h3>
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="loadSoarAuditLogs()">
+                                    <i class="fas fa-sync-alt"></i> Refresh Logs
+                                </button>
+                            </div>
+                            <div class="soc-table-wrapper">
+                                <table class="soc-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Log ID</th>
+                                            <th>Action Type</th>
+                                            <th>Playbook ID</th>
+                                            <th>Execution ID</th>
+                                            <th>Actor / Operator</th>
+                                            <th>Timestamp</th>
+                                            <th>IP Address</th>
+                                            <th>Details</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="soarAuditLogsTableBody">
+                                        <!-- Injected dynamically -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ===========================================================
+                         SUBVIEW 6: ACTIVE IP QUARANTINE REGISTRY (Preserved)
+                         =========================================================== -->
+                    <div id="soarSubviewQuarantine" class="soar-subview" style="display: none;">
+                        <div class="soc-card">
+                            <div class="soc-card-header">
+                                <h3><i class="fas fa-user-slash" style="color: var(--status-danger);"></i> Dynamic IP Quarantine Registry</h3>
+                                <button class="btn btn-secondary btn-sm" onclick="unblockAllClients()">
+                                    <i class="fas fa-unlock"></i> Unblock All IPs
+                                </button>
+                            </div>
+                            <div class="soc-table-wrapper">
+                                <table class="soc-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Client IP</th>
+                                            <th>Reason</th>
+                                            <th>Blocked At</th>
+                                            <th>Expires At</th>
+                                            <th>Violation Count</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="quarantinedClientsTableBody">
+                                        <tr>
+                                            <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 20px;">
+                                                No active client quarantines in effect. Perimeter is clear.
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </section>
@@ -3368,6 +3808,154 @@
                 <button class="btn btn-primary" onclick="submitPriorityChange()">
                     <i class="fas fa-check"></i> Update Priority
                 </button>
+            </div>
+        </div>
+    <!-- ===================================================================
+         PHASE 6: SOAR AUTOMATION MODALS
+         =================================================================== -->
+
+    <!-- Modal 1: Create Playbook Modal -->
+    <div class="modal-backdrop" id="createPlaybookModal" role="dialog" aria-modal="true" style="display: none;" onclick="if(event.target === this) closeCreatePlaybookModal()">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <h3><i class="fas fa-plus-circle" style="color: var(--primary);"></i> Create New Security Playbook</h3>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="closeCreatePlaybookModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 12px;">
+                    <label class="rca-field-label">Playbook Name *</label>
+                    <input type="text" id="modalPlaybookName" class="soc-input" placeholder="e.g. Account Takeover Containment & Quarantine">
+                </div>
+                <div style="margin-bottom: 12px;">
+                    <label class="rca-field-label">Threat Category *</label>
+                    <select id="modalPlaybookCategory" class="soc-select">
+                        <option value="INJECTION">Injection Defense (SQLi / XSS)</option>
+                        <option value="AUTHENTICATION" selected>Authentication &amp; Sessions (Brute Force / BOLA)</option>
+                        <option value="RATE_LIMIT">Rate Limiting &amp; Denial of Service</option>
+                        <option value="MALWARE">Malware &amp; Malicious Payloads</option>
+                        <option value="EXFILTRATION">Data Exfiltration Prevention</option>
+                        <option value="SYSTEM">System Health &amp; Baseline Recovery</option>
+                    </select>
+                </div>
+                <div style="margin-bottom: 12px;">
+                    <label class="rca-field-label">Trigger Source *</label>
+                    <select id="modalPlaybookTrigger" class="soc-select">
+                        <option value="NEW_INCIDENT">New Escalated Incident</option>
+                        <option value="DETECTION_RULE_MATCHED">Detection Rule Match</option>
+                        <option value="SECURITY_EVENT">Suspicious Security Event</option>
+                        <option value="CONTROLLED_TEST_COMPLETED">Security Test Completed</option>
+                        <option value="MANUAL">Manual Analyst Execution</option>
+                    </select>
+                </div>
+                <div style="margin-bottom: 12px;">
+                    <label class="rca-field-label">Description &amp; Objective *</label>
+                    <textarea id="modalPlaybookDesc" class="soc-textarea" rows="3" placeholder="Describe the tactical objective and scope of this automated response playbook..."></textarea>
+                </div>
+                <div style="margin-bottom: 12px;">
+                    <label class="rca-field-label">Starter Architecture Template</label>
+                    <select id="modalPlaybookTemplate" class="soc-select">
+                        <option value="quarantine_verify">Standard Dynamic Quarantine &amp; Dual-Probe Verification</option>
+                        <option value="approval_revoke">High-Impact Account Lockout with Analyst Approval Gate</option>
+                        <option value="rate_limit">Adaptive Rate-Limiting &amp; Storefront Availability Probe</option>
+                        <option value="blank">Blank Canvas (Trigger node only)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeCreatePlaybookModal()">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="submitCreatePlaybook()">
+                    <i class="fas fa-check"></i> Initialize Playbook
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal 2: Execute Playbook Modal -->
+    <div class="modal-backdrop" id="executePlaybookModal" role="dialog" aria-modal="true" style="display: none;" onclick="if(event.target === this) closeExecutePlaybookModal()">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <h3><i class="fas fa-bolt" style="color: var(--accent-cyan);"></i> Launch SOAR Workflow Execution</h3>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="closeExecutePlaybookModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 12px;">
+                    <label class="rca-field-label">Target Playbook</label>
+                    <input type="text" id="modalExecPlaybookName" class="soc-input" readonly style="opacity: 0.8;">
+                    <input type="hidden" id="modalExecPlaybookId">
+                </div>
+                <div style="margin-bottom: 12px;">
+                    <label class="rca-field-label">Execution Mode *</label>
+                    <select id="modalExecMode" class="soc-select">
+                        <option value="LIVE" selected>LIVE PRODUCTION (Applies real ShopSphere mitigations)</option>
+                        <option value="DRY_RUN">DRY-RUN SIMULATION (Predicts branch traversal without mutating state)</option>
+                    </select>
+                </div>
+                <div style="margin-bottom: 12px;">
+                    <label class="rca-field-label">Associated Security Incident (Optional)</label>
+                    <select id="modalExecIncidentSelect" class="soc-select">
+                        <option value="">-- No Incident (Standalone Execution) --</option>
+                    </select>
+                </div>
+                <div style="margin-bottom: 12px;">
+                    <label class="rca-field-label">Source IP Override (Optional)</label>
+                    <input type="text" id="modalExecSourceIp" class="soc-input" placeholder="e.g. 198.51.100.42">
+                </div>
+                <div class="canvas-help-pill" style="margin-top: 8px;">
+                    <span><i class="fas fa-shield"></i> Target Boundary: Only isolated local ShopSphere test targets are authorized.</span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeExecutePlaybookModal()">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="submitExecutePlaybook()">
+                    <i class="fas fa-play"></i> Launch Execution
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal 3: Approval Decision Modal -->
+    <div class="modal-backdrop" id="soarApprovalModal" role="dialog" aria-modal="true" style="display: none;" onclick="if(event.target === this) closeSoarApprovalModal()">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <h3><i class="fas fa-user-shield" style="color: var(--status-warning);"></i> Authorize Privileged Security Action</h3>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="closeSoarApprovalModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <div style="background: var(--bg-card-subtle); border: 1px solid var(--border-panel); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 14px;">
+                    <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">Approval ID: <span id="modalApprId" class="font-mono text-primary">-</span></div>
+                    <div style="font-size: 13px; font-weight: 600;" id="modalApprAction">High-Impact Action</div>
+                    <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;" id="modalApprTarget">Target: -</div>
+                    <p style="font-size: 12px; margin-top: 8px;" id="modalApprDesc">-</p>
+                </div>
+                <div style="margin-bottom: 14px;">
+                    <label class="rca-field-label">Decision Reason / Analyst Justification *</label>
+                    <textarea id="modalApprReason" class="soc-textarea" rows="3" placeholder="Provide operational justification for approving or mandatory rationale for rejection..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeSoarApprovalModal()">Cancel</button>
+                <button type="button" class="btn btn-danger" onclick="submitApprovalDecision('REJECTED')">
+                    <i class="fas fa-ban"></i> Reject Action
+                </button>
+                <button type="button" class="btn btn-success" onclick="submitApprovalDecision('APPROVED')">
+                    <i class="fas fa-check"></i> Authorize &amp; Resume
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal 4: Workflow Validation Results Modal -->
+    <div class="modal-backdrop" id="soarValidationResultModal" role="dialog" aria-modal="true" style="display: none;" onclick="if(event.target === this) closeSoarValidationModal()">
+        <div class="modal-dialog modal-dialog-lg">
+            <div class="modal-header">
+                <h3><i class="fas fa-check-double" id="modalValIcon" style="color: var(--status-success);"></i> Workflow Validation Diagnostics</h3>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="closeSoarValidationModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body" id="modalValBody">
+                <!-- Injected dynamically -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeSoarValidationModal()">Close</button>
             </div>
         </div>
     </div>

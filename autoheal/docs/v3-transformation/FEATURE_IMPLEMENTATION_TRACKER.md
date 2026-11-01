@@ -133,11 +133,23 @@
 - [x] Automated Test Suite (`tests/test_incident_command_center.py`: 19/19 passed, 100% pass rate; 131/131 full workspace regression pass) — *Verified*
 - [x] Complete Phase 5 Documentation Suite in `docs/v3-transformation/phase-5/` (10 documents) — *Verified*
 
-### Module 6: SOAR Automation Center (Phase 6)
-- [x] Playbook catalog with trigger rules and actions — *Verified*
-- [x] Interactive visual playbook execution flowchart — *Verified*
-- [x] Action execution history log — *Verified*
-- [x] Dynamic IP quarantine registry with one-click purge — *Verified*
+### Module 6: Visual SOAR Automation Builder (Phase 6)
+- [x] Real-time operational KPI banner (`total_playbooks`, `published_playbooks`, `total_executions`, `success_rate_pct`, `pending_approvals`, `total_actions_enforced`) — *Verified against SQLite tables*
+- [x] Playbook Catalog Subview with search, category filtering, status filtering, pagination, and sorting — *Verified on `/api/soar/playbooks`*
+- [x] Visual Node-Based Workflow Canvas Subview with pan/zoom controls, mini-map indicator, and 7-category node palette — *Verified in script.js & style.css*
+- [x] SVG Connection Wire Engine with cubic Bézier path routing, live drawing, wire deletion, and port snapping — *Verified*
+- [x] Node Configuration Drawer for real-time parameter editing with live schema validation — *Verified*
+- [x] Comprehensive 7-Category Node Registry (28 distinct node types: Triggers, Lookups, Conditions, Branches, Approvals, Actions, Verifications) — *Verified on `/api/soar/node-types`*
+- [x] Backend-Authoritative DAG Validator (`SOARValidator`) with 3-color DFS cycle detection, reachability checks, and code injection barricade — *Verified on `/api/soar/playbooks/validate`*
+- [x] Safe Target Allowlisting strictly restricting automation targets to local ShopSphere endpoints — *Verified*
+- [x] Two Execution Modes: Dry-Run Simulation (zero persistent mutation) and Live Execution with real perimeter enforcement — *Verified on `/api/soar/playbooks/{id}/dry-run` and `/execute`*
+- [x] Human-in-the-Loop Approval Center with single-use cryptographic tokens, replay attack defense, and mandatory justification logging — *Verified on `/api/soar/approvals`*
+- [x] Execution History & Node Telemetry Inspector with timeline steps, input/output traces, and per-node duration tracking — *Verified on `/api/soar/executions/{id}`*
+- [x] Accessible List Mode allowing keyboard navigation and full screen-reader support as an accessible alternative to the canvas — *Verified*
+- [x] Incident Command Center Integration (Tab 6 Response Actions dynamically recommends playbooks with 1-click dry-run & live dispatch) — *Verified in Incident Detail Workspace*
+- [x] 4 Baseline Enterprise Playbooks Seeded (`PB-SQLI-CONTAINMENT`, `PB-CRED-STUFFING-LOCKDOWN`, `PB-DOS-RATE-SHAPER`, `PB-BOLA-AUTH-RECOVERY`) — *Verified*
+- [x] Automated Test Suite (`tests/test_soar_automation_builder.py` 16/16 passed, 100% pass rate; 147/147 full platform regression pass) — *Verified*
+- [x] Complete Phase 6 Documentation Suite in `docs/v3-transformation/phase-6/` (14 documents) — *Verified*
 
 ### Module 7: Self-Healing Center (Phase 7)
 - [x] Signature Self-Healing Dashboard view — *Verified*

@@ -199,6 +199,7 @@ function switchToTab(pageId) {
     } else if (pageId === 'pageInvestigation') {
         populateInvestigationDropdown();
     } else if (pageId === 'pageSoar') {
+        initSoarSection();
         loadQuarantinedClients();
         loadSecurityPosture();
     } else if (pageId === 'pageHealing') {
@@ -3405,7 +3406,130 @@ function renderWorkspaceResponseActions(inc) {
                 </button>
             </div>
         </div>
+
+        <div style="margin-top:20px; border-top:1px solid var(--border-panel); padding-top:16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <div style="font-weight:700; color:var(--text-primary); font-size:0.85rem; display:flex; align-items:center; gap:8px;">
+                    <i class="fa-solid fa-diagram-project" style="color:#A78BFA;"></i> Recommended SOAR Playbooks
+                </div>
+                <button type="button" class="btn btn-outline btn-sm" onclick="switchToTab('pageSoar')" style="font-size:0.7rem;">
+                    <i class="fa-solid fa-arrow-up-right-from-square"></i> Open SOAR Builder
+                </button>
+            </div>
+            <div id="wsRecommendedPlaybooksContainer" style="display:flex; flex-direction:column; gap:10px;">
+                <div style="padding:14px; background:var(--bg-card-subtle); border:1px solid var(--border-panel); border-radius:6px; font-size:0.75rem; color:var(--text-muted); text-align:center;">
+                    <i class="fas fa-spinner fa-spin"></i> Loading recommended response playbooks...
+                </div>
+            </div>
+        </div>
     `;
+
+    loadRecommendedPlaybooksForIncident(inc);
+}
+
+async function loadRecommendedPlaybooksForIncident(inc) {
+    const container = document.getElementById('wsRecommendedPlaybooksContainer');
+    if (!container) return;
+
+    try {
+        const res = await fetch('/api/soar/playbooks?status=PUBLISHED');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const playbooks = data.playbooks || [];
+
+        if (playbooks.length === 0) {
+            container.innerHTML = `<div style="padding:12px; font-size:0.75rem; color:var(--text-muted);">No published playbooks available.</div>`;
+            return;
+        }
+
+        container.innerHTML = playbooks.map(pb => {
+            return `
+                <div style="background:var(--bg-card-subtle); border:1px solid var(--border-panel); border-radius:6px; padding:12px; display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+                    <div style="flex-grow:1; min-width:240px;">
+                        <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+                            <strong style="color:var(--text-primary); font-size:0.82rem;">${escapeHtml(pb.name)}</strong>
+                            <span class="soar-badge badge-purple">${escapeHtml(pb.category || 'CONTAINMENT')}</span>
+                            <span class="font-mono text-muted" style="font-size:0.68rem;">${escapeHtml(pb.playbook_id)}</span>
+                        </div>
+                        <div style="font-size:0.72rem; color:var(--text-secondary); line-height:1.4;">${escapeHtml(pb.description || '')}</div>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+                        <button type="button" class="btn btn-outline btn-sm" onclick="dryRunPlaybookFromIncident('${escapeHtml(pb.playbook_id)}', '${escapeHtml(inc.incident_id)}', '${escapeHtml(inc.source_ip || '127.0.0.1')}')" style="font-size:0.72rem;">
+                            <i class="fa-solid fa-vial"></i> Dry-Run
+                        </button>
+                        <button type="button" class="btn btn-primary btn-sm" onclick="executePlaybookFromIncident('${escapeHtml(pb.playbook_id)}', '${escapeHtml(inc.incident_id)}', '${escapeHtml(inc.source_ip || '127.0.0.1')}')" style="font-size:0.72rem;">
+                            <i class="fa-solid fa-play"></i> Execute
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    } catch (err) {
+        container.innerHTML = `<div style="padding:10px; font-size:0.75rem; color:var(--status-danger);">Failed loading playbooks: ${escapeHtml(err.message)}</div>`;
+    }
+}
+
+async function dryRunPlaybookFromIncident(playbookId, incidentId, ip) {
+    toastr.info(`Running dry-run simulation of ${playbookId} for ${incidentId}...`);
+    try {
+        const res = await fetch(`/api/soar/playbooks/${encodeURIComponent(playbookId)}/dry-run`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                incident_id: incidentId,
+                trigger_payload: {
+                    source: 'INCIDENT_COMMAND_CENTER',
+                    incident_id: incidentId,
+                    source_ip: ip,
+                    severity: 'HIGH'
+                }
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+        toastr.success(`Dry-run simulation completed! ${data.executed_nodes_count} nodes traversed safely.`);
+        switchToTab('pageSoar');
+        switchSoarSubview('monitor');
+        inspectSoarExecution(data.execution_id);
+    } catch (err) {
+        toastr.error(`Dry-run failed: ${err.message}`);
+    }
+}
+
+async function executePlaybookFromIncident(playbookId, incidentId, ip) {
+    if (!confirm(`Execute playbook ${playbookId} against incident ${incidentId}? Privileged security containment actions will be dispatched.`)) {
+        return;
+    }
+    toastr.info(`Dispatching playbook ${playbookId}...`);
+    try {
+        const res = await fetch(`/api/soar/playbooks/${encodeURIComponent(playbookId)}/execute`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                incident_id: incidentId,
+                trigger_payload: {
+                    source: 'INCIDENT_COMMAND_CENTER',
+                    incident_id: incidentId,
+                    source_ip: ip,
+                    severity: 'HIGH'
+                }
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+        if (data.status === 'WAITING_FOR_APPROVAL') {
+            toastr.warning(`Playbook paused at approval gate (${data.approval_id}). Check Approval Center.`);
+            switchToTab('pageSoar');
+            switchSoarSubview('approvals');
+        } else {
+            toastr.success(`Playbook executed! Status: ${data.status}`);
+            switchToTab('pageSoar');
+            switchSoarSubview('monitor');
+            inspectSoarExecution(data.execution_id);
+        }
+    } catch (err) {
+        toastr.error(`Execution failed: ${err.message}`);
+    }
 }
 
 function triggerSoarAction(actionType, target) {
@@ -5529,4 +5653,1752 @@ function loadUsersTable() {
 function loadAuditLogsTable() {
     toastr.info('Signed security audit trail refreshed.');
 }
+
+// =========================================================================
+// 16. VISUAL SOAR AUTOMATION BUILDER CONTROLLER (PHASE 6)
+// Complete client-side engine: interactive canvas, node palette drag-drop,
+// cubic bezier wiring, auto-layout, validation, dry-run, execution timeline,
+// approval center, and audit logging.
+// =========================================================================
+
+let soarSectionInitialized = false;
+let soarActiveSubview = 'library';
+let soarPlaybooksCache = [];
+let soarActivePlaybook = null;
+let soarActiveVersion = null;
+let soarSelectedNodeId = null;
+let soarCanvasNodes = [];
+let soarCanvasEdges = [];
+let soarCanvasZoom = 1.0;
+let soarCanvasPanX = 60;
+let soarCanvasPanY = 60;
+let soarIsPanning = false;
+let soarPanStart = { x: 0, y: 0 };
+let soarIsDraggingNode = false;
+let soarDraggedNodeId = null;
+let soarNodeDragOffset = { x: 0, y: 0 };
+let soarConnectingPort = null;
+let soarUndoStack = [];
+let soarRedoStack = [];
+let soarNodeTypesCache = {};
+let soarPendingApprovalsCache = [];
+let soarActiveExecId = null;
+let soarExecutionPollTimer = null;
+let soarConnectingLineEl = null;
+
+// Node Category Metadata for Visual Styling
+const SOAR_CAT_INFO = {
+    'trigger': { dotClass: 'cat-trigger', label: 'Trigger', icon: 'fa-bolt' },
+    'lookup': { dotClass: 'cat-lookup', label: 'Lookup', icon: 'fa-database' },
+    'condition': { dotClass: 'cat-condition', label: 'Condition', icon: 'fa-code-branch' },
+    'branch': { dotClass: 'cat-branch', label: 'Branch', icon: 'fa-diagram-successor' },
+    'approval': { dotClass: 'cat-approval', label: 'Approval', icon: 'fa-user-shield' },
+    'action': { dotClass: 'cat-action', label: 'Action', icon: 'fa-shield-halved' },
+    'verification': { dotClass: 'cat-verification', label: 'Verification', icon: 'fa-vial-circle-check' }
+};
+
+function initSoarSection() {
+    if (soarSectionInitialized) {
+        loadSoarStats();
+        loadSoarPlaybooks();
+        loadSoarApprovalsCount();
+        return;
+    }
+    soarSectionInitialized = true;
+    console.log('⚡ Initializing Visual SOAR Automation Builder (Phase 6)...');
+
+    // Subnav Buttons
+    document.querySelectorAll('.soar-subnav-btn').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            const subview = this.getAttribute('data-soar-subview');
+            switchSoarSubview(subview);
+        });
+    });
+
+    // Search and Filters
+    const searchInput = document.getElementById('soarSearchInput');
+    const filterCat = document.getElementById('soarFilterCategory');
+    const filterStatus = document.getElementById('soarFilterStatus');
+    if (searchInput) searchInput.addEventListener('input', () => filterAndRenderPlaybooks());
+    if (filterCat) filterCat.addEventListener('change', () => filterAndRenderPlaybooks());
+    if (filterStatus) filterStatus.addEventListener('change', () => filterAndRenderPlaybooks());
+
+    // Canvas Container Events (Pan, Zoom, Drag-Drop)
+    initSoarCanvasInteractions();
+
+    // Node Palette Drag
+    initSoarPaletteInteractions();
+
+    // Initial Data Fetch
+    loadSoarStats();
+    loadSoarPlaybooks();
+    loadSoarNodeTypes();
+    loadSoarApprovalsCount();
+}
+
+function switchSoarSubview(subviewName) {
+    soarActiveSubview = subviewName;
+    const cap = subviewName.charAt(0).toUpperCase() + subviewName.slice(1);
+
+    // Update subnav pills
+    document.querySelectorAll('.soar-subnav-btn').forEach(btn => {
+        const matchesData = btn.getAttribute('data-soar-subview') === subviewName;
+        const matchesId = btn.id === `btnSoarNav${cap}`;
+        btn.classList.toggle('active', matchesData || matchesId);
+    });
+
+    // Update visible subview
+    document.querySelectorAll('.soar-subview').forEach(view => {
+        view.classList.remove('active');
+        view.style.display = 'none';
+    });
+
+    const target = document.getElementById(`soarSubview${cap}`) || document.getElementById(`soarSubView_${subviewName}`);
+    if (target) {
+        target.classList.add('active');
+        target.style.display = 'block';
+    }
+
+    // Refresh context-specific data
+    if (subviewName === 'library') {
+        loadSoarStats();
+        loadSoarPlaybooks();
+    } else if (subviewName === 'builder') {
+        if (!soarActivePlaybook && soarPlaybooksCache.length > 0) {
+            openPlaybookInBuilder(soarPlaybooksCache[0].playbook_id);
+        } else {
+            renderSoarCanvas();
+        }
+    } else if (subviewName === 'monitor') {
+        loadSoarExecutions();
+    } else if (subviewName === 'approvals') {
+        loadSoarApprovals();
+    } else if (subviewName === 'audit') {
+        loadSoarAuditLogs();
+    } else if (subviewName === 'quarantine') {
+        loadQuarantinedClients();
+    }
+}
+
+// -------------------------------------------------------------------------
+// 16.1 PLAYBOOK LIBRARY & KPI METRICS
+// -------------------------------------------------------------------------
+
+async function loadSoarStats() {
+    try {
+        const res = await fetch('/api/soar/stats');
+        if (!res.ok) return;
+        const data = await res.json();
+
+        // Support both ID naming conventions seamlessly
+        const setVal = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = val;
+        };
+
+        setVal('soarKpiPublished', data.published_playbooks ?? 0);
+        setVal('soarKpiPublishedPlaybooks', data.published_playbooks ?? 0);
+        setVal('soarKpiTotalPlaybooks', data.total_playbooks ?? (data.published_playbooks + data.draft_playbooks) ?? 4);
+        setVal('soarKpiTotalExecs', data.total_executions ?? 0);
+        setVal('soarKpiTotalExecutions', data.total_executions ?? 0);
+        setVal('soarKpiSuccessRate', `${data.success_rate_pct ?? 100}%`);
+        setVal('soarKpiAvgDuration', `${data.avg_duration_ms ?? 0}ms`);
+        setVal('soarKpiPendingApprovals', data.pending_approvals ?? 0);
+        setVal('soarKpiActionsEnforced', data.total_node_executions ?? data.total_executions ?? 0);
+        setVal('soarKpiQuarantines', data.active_quarantines ?? 0);
+
+        // Update badge
+        const badge = document.getElementById('soarNavBadgePendingApprovals');
+        if (badge) {
+            badge.textContent = data.pending_approvals ?? 0;
+            badge.style.display = (data.pending_approvals > 0) ? 'inline-flex' : 'none';
+        }
+    } catch (e) {
+        console.warn('Failed to load SOAR stats', e);
+    }
+}
+
+async function loadSoarApprovalsCount() {
+    try {
+        const res = await fetch('/api/soar/approvals/pending');
+        if (!res.ok) return;
+        const data = await res.json();
+        const pending = Array.isArray(data) ? data : (data.pending_approvals || []);
+        soarPendingApprovalsCache = pending;
+
+        const badge = document.getElementById('soarNavBadgePendingApprovals');
+        if (badge) {
+            badge.textContent = pending.length;
+            badge.style.display = (pending.length > 0) ? 'inline-flex' : 'none';
+        }
+    } catch (e) {}
+}
+
+async function loadSoarNodeTypes() {
+    try {
+        const res = await fetch('/api/soar/node-types');
+        if (!res.ok) return;
+        const data = await res.json();
+        soarNodeTypesCache = data.node_types || {};
+        renderSoarPalette();
+    } catch (e) {}
+}
+
+function renderSoarPalette() {
+    const container = document.getElementById('soarPaletteContainer');
+    if (!container) return;
+
+    // Group types by category
+    const grouped = {};
+    Object.keys(soarNodeTypesCache).forEach(typeKey => {
+        const item = soarNodeTypesCache[typeKey];
+        const cat = item.category || 'action';
+        if (!grouped[cat]) grouped[cat] = [];
+        grouped[cat].push({ type: typeKey, ...item });
+    });
+
+    const catLabels = {
+        'trigger': 'Triggers',
+        'lookup': 'Data Lookups',
+        'condition': 'Conditions',
+        'branch': 'Branches',
+        'approval': 'Approvals',
+        'action': 'Response Actions',
+        'verification': 'Verifications'
+    };
+
+    container.innerHTML = Object.keys(grouped).map(cat => {
+        const catInfo = SOAR_CAT_INFO[cat] || SOAR_CAT_INFO.action;
+        const items = grouped[cat];
+        return `
+            <div class="palette-category">
+                <div class="palette-category-label">
+                    <span class="soar-node-category-dot ${catInfo.dotClass}"></span>
+                    <span>${catLabels[cat] || cat}</span>
+                </div>
+                ${items.map(it => `
+                    <div class="palette-node-item" draggable="true" data-node-type="${escapeHtml(it.type)}" title="${escapeHtml(it.description || it.name)}">
+                        <span class="palette-node-icon"><i class="fa-solid ${catInfo.icon}"></i></span>
+                        <span>${escapeHtml(it.name)}</span>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    }).join('');
+
+    // Rebind dragstart
+    initSoarPaletteInteractions();
+}
+
+async function loadSoarPlaybooks() {
+    const grid = document.getElementById('soarPlaybooksGrid');
+    if (grid && soarPlaybooksCache.length === 0) {
+        grid.innerHTML = '<div style="grid-column: 1/-1; padding: 40px; text-align: center; color: var(--text-muted);"><i class="fas fa-spinner fa-spin fa-2x"></i><div style="margin-top:10px;">Loading SOAR playbooks...</div></div>';
+    }
+
+    try {
+        const res = await fetch('/api/soar/playbooks');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        soarPlaybooksCache = data.playbooks || [];
+        filterAndRenderPlaybooks();
+    } catch (err) {
+        if (grid) {
+            grid.innerHTML = `<div style="grid-column: 1/-1; padding: 30px; text-align: center; color: var(--status-danger);">Failed to load playbooks: ${escapeHtml(err.message)}</div>`;
+        }
+    }
+}
+
+function filterAndRenderPlaybooks() {
+    const grid = document.getElementById('soarPlaybooksGrid');
+    if (!grid) return;
+
+    const searchVal = (document.getElementById('soarSearchInput')?.value || '').toLowerCase().trim();
+    const catVal = document.getElementById('soarFilterCategory')?.value || 'ALL';
+    const statusVal = document.getElementById('soarFilterStatus')?.value || 'ALL';
+
+    const filtered = soarPlaybooksCache.filter(pb => {
+        const matchesSearch = !searchVal ||
+            pb.name.toLowerCase().includes(searchVal) ||
+            pb.playbook_id.toLowerCase().includes(searchVal) ||
+            (pb.description && pb.description.toLowerCase().includes(searchVal));
+
+        const matchesCat = (catVal === 'ALL') || (pb.category === catVal);
+        const matchesStatus = (statusVal === 'ALL') || (pb.status === statusVal);
+
+        return matchesSearch && matchesCat && matchesStatus;
+    });
+
+    if (filtered.length === 0) {
+        grid.innerHTML = `
+            <div style="grid-column: 1/-1; padding: 40px; text-align: center; background: #101722; border: 1px dashed #253344; border-radius: 8px;">
+                <i class="fa-solid fa-folder-open fa-2x" style="color: #64748B; margin-bottom: 10px;"></i>
+                <div style="font-size: 0.95rem; font-weight: 700; color: #F1F5F9;">No playbooks match your filter criteria</div>
+                <div style="font-size: 0.78rem; color: #94A3B8; margin-top: 4px;">Try clearing filters or click "New Playbook" to create one.</div>
+            </div>
+        `;
+        return;
+    }
+
+    grid.innerHTML = filtered.map(pb => {
+        const statusClass = pb.status ? pb.status.toLowerCase() : 'draft';
+        const badgeStatusClass = pb.status === 'PUBLISHED' ? 'badge-green' : (pb.status === 'DRAFT' ? 'badge-amber' : 'badge-neutral');
+        const successRate = pb.total_executions > 0 ? `${Math.round((pb.successful_executions / pb.total_executions) * 100)}%` : 'N/A';
+
+        return `
+            <div class="soar-playbook-card ${statusClass}">
+                <div>
+                    <div class="soar-playbook-header">
+                        <div>
+                            <div class="soar-playbook-title">
+                                <span>${escapeHtml(pb.name)}</span>
+                                <span class="soar-playbook-id-chip">${escapeHtml(pb.playbook_id)}</span>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:8px; margin-top:4px;">
+                                <span class="soar-badge badge-purple">${escapeHtml(pb.category || 'CONTAINMENT')}</span>
+                                <span class="soar-badge ${badgeStatusClass}">${escapeHtml(pb.status || 'DRAFT')}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="soar-playbook-desc">${escapeHtml(pb.description || 'No description provided.')}</div>
+                    
+                    <div class="soar-playbook-metrics">
+                        <div class="soar-metric-col">
+                            <div class="val">${pb.total_executions || 0}</div>
+                            <div class="lbl">Executions</div>
+                        </div>
+                        <div class="soar-metric-col">
+                            <div class="val" style="color: #22C55E;">${successRate}</div>
+                            <div class="lbl">Success Rate</div>
+                        </div>
+                        <div class="soar-metric-col">
+                            <div class="val" style="color: #38BDF8;">v${pb.version || 1}</div>
+                            <div class="lbl">Version</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="soar-playbook-footer">
+                    <div class="soar-playbook-ver">
+                        <i class="fa-regular fa-clock"></i> ${formatAppSecTimestamp(pb.updated_at || pb.created_at)}
+                    </div>
+                    <div class="soar-card-btn-group">
+                        <button type="button" class="btn btn-outline btn-sm" onclick="duplicatePlaybook('${escapeHtml(pb.playbook_id)}')" title="Duplicate Playbook" style="padding: 5px 9px;">
+                            <i class="fa-solid fa-copy"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline btn-sm" onclick="openExecutePlaybookModal('${escapeHtml(pb.playbook_id)}')" title="Execute / Dry-Run" style="padding: 5px 9px;">
+                            <i class="fa-solid fa-play"></i>
+                        </button>
+                        <button type="button" class="btn btn-primary btn-sm" onclick="openPlaybookInBuilder('${escapeHtml(pb.playbook_id)}')" style="font-size: 0.75rem; padding: 5px 12px;">
+                            <i class="fa-solid fa-pen-ruler"></i> Open Canvas
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function openCreatePlaybookModal() {
+    const modal = document.getElementById('createPlaybookModal');
+    if (modal) modal.style.display = 'flex';
+}
+
+function closeCreatePlaybookModal() {
+    const modal = document.getElementById('createPlaybookModal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function submitCreatePlaybook(e) {
+    if (e) e.preventDefault();
+    const idInput = document.getElementById('newPlaybookId');
+    const nameInput = document.getElementById('newPlaybookName');
+    const catInput = document.getElementById('newPlaybookCategory');
+    const descInput = document.getElementById('newPlaybookDesc');
+
+    const id = idInput ? idInput.value.trim() : '';
+    const name = nameInput ? nameInput.value.trim() : '';
+    const category = catInput ? catInput.value : 'CONTAINMENT';
+    const description = descInput ? descInput.value.trim() : '';
+
+    if (!id || !name) {
+        toastr.warning('Please enter Playbook ID and Name');
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/soar/playbooks', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                playbook_id: id,
+                name: name,
+                category: category,
+                description: description
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+
+        toastr.success(`Playbook ${data.playbook_id} created successfully!`);
+        closeCreatePlaybookModal();
+        await loadSoarPlaybooks();
+        openPlaybookInBuilder(data.playbook_id);
+    } catch (err) {
+        toastr.error(`Creation failed: ${err.message}`);
+    }
+}
+
+async function duplicatePlaybook(playbookId) {
+    try {
+        toastr.info(`Duplicating ${playbookId}...`);
+        const res = await fetch(`/api/soar/playbooks/${encodeURIComponent(playbookId)}/duplicate`, {
+            method: 'POST'
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+
+        toastr.success(`Duplicated as ${data.playbook_id}`);
+        await loadSoarPlaybooks();
+        openPlaybookInBuilder(data.playbook_id);
+    } catch (err) {
+        toastr.error(`Duplication failed: ${err.message}`);
+    }
+}
+
+function openExecutePlaybookModal(playbookId) {
+    const modal = document.getElementById('executePlaybookModal');
+    const idSpan = document.getElementById('execPlaybookIdSpan');
+    const idHidden = document.getElementById('execPlaybookId');
+    if (idSpan) idSpan.textContent = playbookId;
+    if (idHidden) idHidden.value = playbookId;
+    if (modal) modal.style.display = 'flex';
+}
+
+function closeExecutePlaybookModal() {
+    const modal = document.getElementById('executePlaybookModal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function submitExecutePlaybook(e) {
+    if (e) e.preventDefault();
+    const playbookId = document.getElementById('execPlaybookId')?.value;
+    const incidentId = document.getElementById('execIncidentId')?.value || '';
+    const isDryRun = document.getElementById('execDryRunToggle')?.checked || false;
+    const sourceIp = document.getElementById('execSourceIp')?.value || '127.0.0.1';
+
+    if (!playbookId) return;
+
+    closeExecutePlaybookModal();
+    const endpoint = isDryRun ? `/api/soar/playbooks/${encodeURIComponent(playbookId)}/dry-run` : `/api/soar/playbooks/${encodeURIComponent(playbookId)}/execute`;
+
+    toastr.info(`${isDryRun ? 'Dry-running' : 'Executing'} ${playbookId}...`);
+
+    try {
+        const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                incident_id: incidentId || null,
+                trigger_payload: {
+                    source: 'MANUAL_UI',
+                    source_ip: sourceIp,
+                    incident_id: incidentId,
+                    severity: 'HIGH'
+                }
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+
+        if (data.status === 'WAITING_FOR_APPROVAL') {
+            toastr.warning(`Playbook paused at approval gate: ${data.approval_id}`);
+            switchSoarSubview('approvals');
+        } else {
+            toastr.success(`${isDryRun ? 'Dry-run' : 'Execution'} finished: ${data.status}`);
+            switchSoarSubview('monitor');
+            inspectSoarExecution(data.execution_id);
+        }
+    } catch (err) {
+        toastr.error(`Execution failed: ${err.message}`);
+    }
+}
+
+// -------------------------------------------------------------------------
+// 16.2 VISUAL WORKFLOW CANVAS ENGINE
+// -------------------------------------------------------------------------
+
+async function openPlaybookInBuilder(playbookId) {
+    try {
+        const res = await fetch(`/api/soar/playbooks/${encodeURIComponent(playbookId)}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+
+        soarActivePlaybook = data;
+        soarActiveVersion = data.version_detail || null;
+
+        const titleEl = document.getElementById('soarBuilderPlaybookTitle');
+        const idEl = document.getElementById('soarBuilderPlaybookId');
+        const verEl = document.getElementById('soarBuilderVersionTag');
+
+        if (titleEl) titleEl.textContent = data.name;
+        if (idEl) idEl.textContent = data.playbook_id;
+        if (verEl) verEl.textContent = `v${data.version || 1} • ${data.status || 'DRAFT'}`;
+
+        // Load definition
+        const def = data.definition || (data.version_detail && data.version_detail.definition) || { nodes: [], edges: [] };
+        soarCanvasNodes = JSON.parse(JSON.stringify(def.nodes || []));
+        soarCanvasEdges = JSON.parse(JSON.stringify(def.edges || []));
+
+        // Reset viewport pan & zoom
+        soarCanvasZoom = 1.0;
+        soarCanvasPanX = 60;
+        soarCanvasPanY = 60;
+        soarSelectedNodeId = null;
+        soarUndoStack = [];
+        soarRedoStack = [];
+
+        switchSoarSubview('builder');
+        renderSoarCanvas();
+        renderSoarAccessibleList();
+    } catch (err) {
+        toastr.error(`Failed loading playbook in builder: ${err.message}`);
+    }
+}
+
+function initSoarCanvasInteractions() {
+    const container = document.getElementById('soarCanvasContainer');
+    if (!container) return;
+
+    // Pan with Mouse Down on canvas container background
+    container.addEventListener('mousedown', function(e) {
+        if (e.target.closest('.soar-node-card') || e.target.closest('.soar-port') || e.target.closest('.soar-minimap')) {
+            return;
+        }
+        soarIsPanning = true;
+        soarPanStart = { x: e.clientX - soarCanvasPanX, y: e.clientY - soarCanvasPanY };
+        container.style.cursor = 'grabbing';
+    });
+
+    window.addEventListener('mousemove', function(e) {
+        if (soarIsPanning) {
+            soarCanvasPanX = e.clientX - soarPanStart.x;
+            soarCanvasPanY = e.clientY - soarPanStart.y;
+            applySoarViewportTransform();
+            renderSoarMinimap();
+        } else if (soarIsDraggingNode && soarDraggedNodeId) {
+            const node = soarCanvasNodes.find(n => n.id === soarDraggedNodeId);
+            if (node) {
+                const rect = container.getBoundingClientRect();
+                const mouseCanvasX = (e.clientX - rect.left - soarCanvasPanX) / soarCanvasZoom;
+                const mouseCanvasY = (e.clientY - rect.top - soarCanvasPanY) / soarCanvasZoom;
+                node.position.x = Math.round(mouseCanvasX - soarNodeDragOffset.x);
+                node.position.y = Math.round(mouseCanvasY - soarNodeDragOffset.y);
+                updateNodeCardPosition(node);
+                renderSoarWires();
+                renderSoarMinimap();
+            }
+        } else if (soarConnectingPort) {
+            updateConnectingWire(e);
+        }
+    });
+
+    window.addEventListener('mouseup', function(e) {
+        if (soarIsPanning) {
+            soarIsPanning = false;
+            container.style.cursor = 'grab';
+        }
+        if (soarIsDraggingNode) {
+            soarIsDraggingNode = false;
+            soarDraggedNodeId = null;
+        }
+        if (soarConnectingPort) {
+            finishConnectingWire(e);
+        }
+    });
+
+    // Zoom on Wheel
+    container.addEventListener('wheel', function(e) {
+        e.preventDefault();
+        const delta = e.deltaY < 0 ? 0.1 : -0.1;
+        const newZoom = Math.min(2.2, Math.max(0.35, soarCanvasZoom + delta));
+
+        // Zoom relative to pointer
+        const rect = container.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        soarCanvasPanX = mouseX - (mouseX - soarCanvasPanX) * (newZoom / soarCanvasZoom);
+        soarCanvasPanY = mouseY - (mouseY - soarCanvasPanY) * (newZoom / soarCanvasZoom);
+        soarCanvasZoom = newZoom;
+
+        applySoarViewportTransform();
+        renderSoarMinimap();
+    }, { passive: false });
+}
+
+function initSoarPaletteInteractions() {
+    document.querySelectorAll('.palette-node-item').forEach(item => {
+        item.addEventListener('dragstart', function(e) {
+            const nodeType = this.getAttribute('data-node-type');
+            e.dataTransfer.setData('text/plain', nodeType);
+        });
+    });
+
+    const container = document.getElementById('soarCanvasContainer');
+    if (!container) return;
+
+    container.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+    });
+
+    container.addEventListener('drop', function(e) {
+        e.preventDefault();
+        const nodeType = e.dataTransfer.getData('text/plain');
+        if (!nodeType) return;
+
+        const rect = container.getBoundingClientRect();
+        const dropX = Math.round((e.clientX - rect.left - soarCanvasPanX) / soarCanvasZoom);
+        const dropY = Math.round((e.clientY - rect.top - soarCanvasPanY) / soarCanvasZoom);
+
+        pushCanvasUndoState();
+        addNewNodeToCanvas(nodeType, dropX, dropY);
+    });
+}
+
+function addNewNodeToCanvas(nodeType, x, y) {
+    const typeMeta = soarNodeTypesCache[nodeType] || {};
+    const category = typeMeta.category || 'action';
+    const index = soarCanvasNodes.length + 1;
+    const nodeId = `${nodeType.replace(/_/g, '-')}-${index}`;
+
+    const newNode = {
+        id: nodeId,
+        type: nodeType,
+        category: category,
+        name: typeMeta.name || nodeType,
+        description: typeMeta.description || '',
+        position: { x: Math.max(20, x), y: Math.max(20, y) },
+        config: JSON.parse(JSON.stringify(typeMeta.default_config || {})),
+        failure_policy: 'ABORT',
+        timeout_seconds: 30
+    };
+
+    soarCanvasNodes.push(newNode);
+    renderSoarCanvas();
+    selectSoarNode(newNode.id);
+    renderSoarAccessibleList();
+    toastr.info(`Added node [${newNode.name}] to canvas`);
+}
+
+function applySoarViewportTransform() {
+    const viewport = document.getElementById('soarCanvasViewport');
+    if (viewport) {
+        viewport.style.transform = `translate(${soarCanvasPanX}px, ${soarCanvasPanY}px) scale(${soarCanvasZoom})`;
+    }
+}
+
+function renderSoarCanvas() {
+    applySoarViewportTransform();
+    renderSoarNodes();
+    renderSoarWires();
+    renderSoarMinimap();
+}
+
+function renderSoarNodes() {
+    const layer = document.getElementById('soarNodesLayer');
+    if (!layer) return;
+
+    layer.innerHTML = '';
+
+    soarCanvasNodes.forEach(node => {
+        const catInfo = SOAR_CAT_INFO[node.category] || SOAR_CAT_INFO.action;
+        const isSelected = node.id === soarSelectedNodeId;
+
+        const card = document.createElement('div');
+        card.id = `nodeEl_${node.id}`;
+        card.className = `soar-node-card ${isSelected ? 'selected' : ''}`;
+        card.style.left = `${node.position.x}px`;
+        card.style.top = `${node.position.y}px`;
+
+        // Render port handles depending on node type
+        let portHtml = '';
+        if (node.category !== 'trigger') {
+            portHtml += `<div class="soar-port port-input" data-node-id="${node.id}" data-handle="input" title="Input Port"></div>`;
+        }
+
+        if (node.type === 'condition_severity' || node.type === 'condition_category' || node.type === 'condition_asset_class' || node.type === 'branch_if_else') {
+            portHtml += `
+                <div class="soar-port port-output-true" data-node-id="${node.id}" data-handle="true" title="True Branch"></div>
+                <div class="soar-port-label label-true">TRUE</div>
+                <div class="soar-port port-output-false" data-node-id="${node.id}" data-handle="false" title="False Branch"></div>
+                <div class="soar-port-label label-false">FALSE</div>
+            `;
+        } else if (node.type === 'approval_analyst' || node.type === 'approval_high_impact') {
+            portHtml += `
+                <div class="soar-port port-output-approved" data-node-id="${node.id}" data-handle="approved" title="Approved Branch"></div>
+                <div class="soar-port-label label-approved">APPR</div>
+                <div class="soar-port port-output-rejected" data-node-id="${node.id}" data-handle="rejected" title="Rejected Branch"></div>
+                <div class="soar-port-label label-rejected">REJ</div>
+            `;
+        } else {
+            portHtml += `<div class="soar-port port-output" data-node-id="${node.id}" data-handle="output" title="Output Port"></div>`;
+        }
+
+        card.innerHTML = `
+            ${portHtml}
+            <div class="soar-node-header">
+                <div class="soar-node-header-left">
+                    <span class="soar-node-category-dot ${catInfo.dotClass}"></span>
+                    <span title="${escapeHtml(node.name)}">${escapeHtml(node.name)}</span>
+                </div>
+                <i class="fa-solid ${catInfo.icon}" style="font-size: 0.72rem; color: #94A3B8;"></i>
+            </div>
+            <div class="soar-node-body">
+                <div class="soar-node-type-label">${escapeHtml(node.type)}</div>
+                <div class="soar-node-summary">${escapeHtml(node.description || getSummaryFromNodeConfig(node))}</div>
+            </div>
+        `;
+
+        // Node Card Mouse Down (selection & dragging)
+        card.addEventListener('mousedown', function(e) {
+            if (e.target.closest('.soar-port')) return;
+            e.stopPropagation();
+            selectSoarNode(node.id);
+
+            soarIsDraggingNode = true;
+            soarDraggedNodeId = node.id;
+            const container = document.getElementById('soarCanvasContainer').getBoundingClientRect();
+            const mouseCanvasX = (e.clientX - container.left - soarCanvasPanX) / soarCanvasZoom;
+            const mouseCanvasY = (e.clientY - container.top - soarCanvasPanY) / soarCanvasZoom;
+            soarNodeDragOffset = {
+                x: mouseCanvasX - node.position.x,
+                y: mouseCanvasY - node.position.y
+            };
+        });
+
+        // Port Mouse Down (wiring start)
+        card.querySelectorAll('.soar-port').forEach(port => {
+            port.addEventListener('mousedown', function(e) {
+                e.stopPropagation();
+                const handle = this.getAttribute('data-handle');
+                if (handle === 'input') return; // Connect from output to input
+                startConnectingWire(node.id, handle, this, e);
+            });
+        });
+
+        layer.appendChild(card);
+    });
+}
+
+function getSummaryFromNodeConfig(node) {
+    if (node.type === 'action_block_ip') return 'Contain source IP in perimeter WAF';
+    if (node.type === 'action_revoke_session') return 'Flush JWT tokens and invalidate session';
+    if (node.type === 'action_apply_rate_limit') return `Rate limit: ${node.config?.requests_per_minute || 60} req/min`;
+    if (node.type === 'action_run_verification_probe') return 'Dual-probe loopback health check';
+    if (node.type === 'approval_high_impact') return 'Tier-3 Lead approval required';
+    if (node.type === 'condition_severity') return `Compare severity == ${node.config?.expected_severity || 'CRITICAL'}`;
+    return 'Configured workflow step';
+}
+
+function updateNodeCardPosition(node) {
+    const el = document.getElementById(`nodeEl_${node.id}`);
+    if (el) {
+        el.style.left = `${node.position.x}px`;
+        el.style.top = `${node.position.y}px`;
+    }
+}
+
+function renderSoarWires() {
+    const svg = document.getElementById('soarCanvasSvg');
+    if (!svg) return;
+
+    svg.innerHTML = '';
+
+    soarCanvasEdges.forEach((edge, idx) => {
+        const sourceNode = soarCanvasNodes.find(n => n.id === edge.source);
+        const targetNode = soarCanvasNodes.find(n => n.id === edge.target);
+        if (!sourceNode || !targetNode) return;
+
+        const p1 = getPortCoordinates(sourceNode, edge.source_handle || 'output', true);
+        const p2 = getPortCoordinates(targetNode, 'input', false);
+
+        const dx = Math.max(40, Math.abs(p2.x - p1.x) * 0.45);
+        const d = `M ${p1.x} ${p1.y} C ${p1.x + dx} ${p1.y}, ${p2.x - dx} ${p2.y}, ${p2.x} ${p2.y}`;
+
+        const wireClass = edge.source_handle === 'true' ? 'wire-true' :
+                         edge.source_handle === 'false' ? 'wire-false' :
+                         edge.source_handle === 'approved' ? 'wire-approved' :
+                         edge.source_handle === 'rejected' ? 'wire-rejected' : '';
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', d);
+        path.setAttribute('class', `soar-wire ${wireClass}`);
+        path.setAttribute('data-edge-id', edge.id || `e-${idx}`);
+        path.setAttribute('title', `Click to delete connection: ${edge.source} -> ${edge.target}`);
+
+        // Click wire to delete
+        path.addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (confirm(`Remove connection from [${sourceNode.name}] to [${targetNode.name}]?`)) {
+                pushCanvasUndoState();
+                soarCanvasEdges = soarCanvasEdges.filter(e => e !== edge);
+                renderSoarWires();
+                renderSoarAccessibleList();
+                toastr.info('Connection wire removed');
+            }
+        });
+
+        svg.appendChild(path);
+    });
+}
+
+function getPortCoordinates(node, handle, isSource) {
+    const width = 230;
+    const height = 90; // Approximate card height
+
+    if (!isSource) {
+        // Input port on left center
+        return { x: node.position.x - 6, y: node.position.y + 45 };
+    }
+
+    if (handle === 'true' || handle === 'approved') {
+        return { x: node.position.x + width + 6, y: node.position.y + 32 };
+    }
+    if (handle === 'false' || handle === 'rejected') {
+        return { x: node.position.x + width + 6, y: node.position.y + 58 };
+    }
+    return { x: node.position.x + width + 6, y: node.position.y + 45 };
+}
+
+function startConnectingWire(sourceId, handle, portEl, e) {
+    soarConnectingPort = { sourceId, handle, portEl };
+    const svg = document.getElementById('soarCanvasSvg');
+    if (!svg) return;
+
+    soarConnectingLineEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    soarConnectingLineEl.setAttribute('class', 'soar-wire wire-active');
+    svg.appendChild(soarConnectingLineEl);
+    updateConnectingWire(e);
+}
+
+function updateConnectingWire(e) {
+    if (!soarConnectingPort || !soarConnectingLineEl) return;
+    const sourceNode = soarCanvasNodes.find(n => n.id === soarConnectingPort.sourceId);
+    if (!sourceNode) return;
+
+    const container = document.getElementById('soarCanvasContainer').getBoundingClientRect();
+    const targetCanvasX = (e.clientX - container.left - soarCanvasPanX) / soarCanvasZoom;
+    const targetCanvasY = (e.clientY - container.top - soarCanvasPanY) / soarCanvasZoom;
+
+    const p1 = getPortCoordinates(sourceNode, soarConnectingPort.handle, true);
+    const dx = Math.max(30, Math.abs(targetCanvasX - p1.x) * 0.4);
+    const d = `M ${p1.x} ${p1.y} C ${p1.x + dx} ${p1.y}, ${targetCanvasX - dx} ${targetCanvasY}, ${targetCanvasX} ${targetCanvasY}`;
+    soarConnectingLineEl.setAttribute('d', d);
+}
+
+function finishConnectingWire(e) {
+    if (soarConnectingLineEl) {
+        soarConnectingLineEl.remove();
+        soarConnectingLineEl = null;
+    }
+    if (!soarConnectingPort) return;
+
+    const targetPort = e.target.closest('.soar-port.port-input');
+    if (targetPort) {
+        const targetId = targetPort.getAttribute('data-node-id');
+        if (targetId && targetId !== soarConnectingPort.sourceId) {
+            // Check if edge already exists
+            const existing = soarCanvasEdges.find(ed =>
+                ed.source === soarConnectingPort.sourceId &&
+                ed.target === targetId &&
+                ed.source_handle === soarConnectingPort.handle
+            );
+
+            if (!existing) {
+                pushCanvasUndoState();
+                const newEdge = {
+                    id: `edge-${Date.now()}`,
+                    source: soarConnectingPort.sourceId,
+                    target: targetId,
+                    source_handle: soarConnectingPort.handle,
+                    target_handle: 'input'
+                };
+                soarCanvasEdges.push(newEdge);
+                renderSoarWires();
+                renderSoarMinimap();
+                renderSoarAccessibleList();
+                toastr.success(`Connected ${soarConnectingPort.sourceId} → ${targetId}`);
+            }
+        }
+    }
+    soarConnectingPort = null;
+}
+
+// -------------------------------------------------------------------------
+// 16.3 MINIMAP & AUTO-LAYOUT
+// -------------------------------------------------------------------------
+
+function renderSoarMinimap() {
+    const canvas = document.getElementById('soarMinimapCanvas');
+    const viewbox = document.getElementById('soarMinimapViewbox');
+    if (!canvas || soarCanvasNodes.length === 0) return;
+
+    const ctx = canvas.getContext('2d');
+    canvas.width = 180;
+    canvas.height = 120;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Compute bounding box
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    soarCanvasNodes.forEach(n => {
+        minX = Math.min(minX, n.position.x);
+        minY = Math.min(minY, n.position.y);
+        maxX = Math.max(maxX, n.position.x + 230);
+        maxY = Math.max(maxY, n.position.y + 90);
+    });
+
+    const pad = 80;
+    minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+    const w = Math.max(400, maxX - minX);
+    const h = Math.max(300, maxY - minY);
+
+    const scaleX = canvas.width / w;
+    const scaleY = canvas.height / h;
+    const scale = Math.min(scaleX, scaleY);
+
+    // Draw nodes on minimap
+    soarCanvasNodes.forEach(n => {
+        const mx = (n.position.x - minX) * scale;
+        const my = (n.position.y - minY) * scale;
+        const mw = 230 * scale;
+        const mh = 90 * scale;
+
+        ctx.fillStyle = (n.id === soarSelectedNodeId) ? '#38BDF8' : '#253344';
+        ctx.fillRect(mx, my, mw, mh);
+        ctx.strokeStyle = '#64748B';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(mx, my, mw, mh);
+    });
+
+    // Update viewbox overlay
+    if (viewbox) {
+        const cont = document.getElementById('soarCanvasContainer')?.getBoundingClientRect() || { width: 800, height: 600 };
+        const vx = (-soarCanvasPanX - minX) * scale;
+        const vy = (-soarCanvasPanY - minY) * scale;
+        const vw = (cont.width / soarCanvasZoom) * scale;
+        const vh = (cont.height / soarCanvasZoom) * scale;
+
+        viewbox.style.left = `${Math.max(0, vx)}px`;
+        viewbox.style.top = `${Math.max(0, vy)}px`;
+        viewbox.style.width = `${Math.min(canvas.width, vw)}px`;
+        viewbox.style.height = `${Math.min(canvas.height, vh)}px`;
+    }
+}
+
+function autoLayoutSoarWorkflow() {
+    if (soarCanvasNodes.length === 0) return;
+    pushCanvasUndoState();
+
+    // Compute in-degrees and build adj list
+    const inDegree = {};
+    const adj = {};
+    soarCanvasNodes.forEach(n => {
+        inDegree[n.id] = 0;
+        adj[n.id] = [];
+    });
+    soarCanvasEdges.forEach(e => {
+        if (inDegree[e.target] !== undefined) inDegree[e.target]++;
+        if (adj[e.source]) adj[e.source].push(e.target);
+    });
+
+    // BFS Layer assignment
+    const levels = {};
+    const queue = [];
+    soarCanvasNodes.forEach(n => {
+        if (inDegree[n.id] === 0) {
+            levels[n.id] = 0;
+            queue.push(n.id);
+        }
+    });
+
+    while (queue.length > 0) {
+        const u = queue.shift();
+        const curLevel = levels[u] || 0;
+        (adj[u] || []).forEach(v => {
+            levels[v] = Math.max(levels[v] || 0, curLevel + 1);
+            inDegree[v]--;
+            if (inDegree[v] === 0) {
+                queue.push(v);
+            }
+        });
+    }
+
+    // Group by level
+    const levelBuckets = {};
+    soarCanvasNodes.forEach(n => {
+        const lvl = levels[n.id] || 0;
+        if (!levelBuckets[lvl]) levelBuckets[lvl] = [];
+        levelBuckets[lvl].push(n);
+    });
+
+    // Arrange in clean grid columns
+    Object.keys(levelBuckets).forEach(lvlStr => {
+        const lvl = parseInt(lvlStr, 10);
+        const nodesInLevel = levelBuckets[lvl];
+        nodesInLevel.forEach((node, idx) => {
+            node.position.x = 80 + lvl * 320;
+            node.position.y = 80 + idx * 130;
+        });
+    });
+
+    renderSoarCanvas();
+    renderSoarAccessibleList();
+    toastr.success('Workflow auto-layout arranged hierarchically.');
+}
+
+function fitSoarCanvasView() {
+    if (soarCanvasNodes.length === 0) return;
+    const container = document.getElementById('soarCanvasContainer')?.getBoundingClientRect() || { width: 800, height: 600 };
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    soarCanvasNodes.forEach(n => {
+        minX = Math.min(minX, n.position.x);
+        minY = Math.min(minY, n.position.y);
+        maxX = Math.max(maxX, n.position.x + 230);
+        maxY = Math.max(maxY, n.position.y + 90);
+    });
+
+    const w = maxX - minX + 160;
+    const h = maxY - minY + 160;
+
+    const zoomX = container.width / w;
+    const zoomY = container.height / h;
+    soarCanvasZoom = Math.min(1.2, Math.max(0.4, Math.min(zoomX, zoomY)));
+
+    soarCanvasPanX = (container.width - (maxX + minX) * soarCanvasZoom) / 2;
+    soarCanvasPanY = (container.height - (maxY + minY) * soarCanvasZoom) / 2;
+
+    applySoarViewportTransform();
+    renderSoarMinimap();
+}
+
+function zoomSoarCanvas(delta) {
+    soarCanvasZoom = Math.min(2.2, Math.max(0.35, soarCanvasZoom + delta));
+    applySoarViewportTransform();
+    renderSoarMinimap();
+}
+
+function resetSoarCanvasView() {
+    soarCanvasZoom = 1.0;
+    soarCanvasPanX = 60;
+    soarCanvasPanY = 60;
+    applySoarViewportTransform();
+    renderSoarMinimap();
+}
+
+// -------------------------------------------------------------------------
+// 16.4 UNDO / REDO STATE SNAPSHOTS
+// -------------------------------------------------------------------------
+
+function pushCanvasUndoState() {
+    soarUndoStack.push({
+        nodes: JSON.parse(JSON.stringify(soarCanvasNodes)),
+        edges: JSON.parse(JSON.stringify(soarCanvasEdges))
+    });
+    if (soarUndoStack.length > 25) soarUndoStack.shift();
+    soarRedoStack = [];
+}
+
+function soarUndo() {
+    if (soarUndoStack.length === 0) {
+        toastr.info('Nothing to undo.');
+        return;
+    }
+    soarRedoStack.push({
+        nodes: JSON.parse(JSON.stringify(soarCanvasNodes)),
+        edges: JSON.parse(JSON.stringify(soarCanvasEdges))
+    });
+    const prev = soarUndoStack.pop();
+    soarCanvasNodes = prev.nodes;
+    soarCanvasEdges = prev.edges;
+    renderSoarCanvas();
+    renderSoarAccessibleList();
+    toastr.info('Undo applied.');
+}
+
+function soarRedo() {
+    if (soarRedoStack.length === 0) {
+        toastr.info('Nothing to redo.');
+        return;
+    }
+    soarUndoStack.push({
+        nodes: JSON.parse(JSON.stringify(soarCanvasNodes)),
+        edges: JSON.parse(JSON.stringify(soarCanvasEdges))
+    });
+    const next = soarRedoStack.pop();
+    soarCanvasNodes = next.nodes;
+    soarCanvasEdges = next.edges;
+    renderSoarCanvas();
+    renderSoarAccessibleList();
+    toastr.info('Redo applied.');
+}
+
+// -------------------------------------------------------------------------
+// 16.5 NODE CONFIGURATION DRAWER
+// -------------------------------------------------------------------------
+
+function selectSoarNode(nodeId) {
+    soarSelectedNodeId = nodeId;
+
+    // Highlight card
+    document.querySelectorAll('.soar-node-card').forEach(c => {
+        c.classList.toggle('selected', c.id === `nodeEl_${nodeId}`);
+    });
+
+    const node = soarCanvasNodes.find(n => n.id === nodeId);
+    const drawer = document.getElementById('soarNodeConfigDrawer') || document.getElementById('soarConfigDrawer');
+    if (!drawer || !node) return;
+
+    drawer.classList.remove('collapsed');
+    drawer.style.display = 'flex';
+
+    // Populate drawer fields
+    const idEl = document.getElementById('soarConfigNodeId');
+    const typeEl = document.getElementById('soarConfigNodeType') || document.getElementById('configDrawerCategory');
+    const nameEl = document.getElementById('soarConfigNodeName') || document.getElementById('configDrawerNodeName');
+    const descEl = document.getElementById('soarConfigNodeDesc');
+    const failEl = document.getElementById('soarConfigFailurePolicy');
+    const timeoutEl = document.getElementById('soarConfigTimeout');
+    const paramsContainer = document.getElementById('soarConfigParamsContainer') || document.getElementById('configDrawerForm');
+
+    if (idEl) idEl.value = node.id;
+    if (typeEl) {
+        if (typeEl.tagName === 'INPUT') typeEl.value = `${node.type} (${node.category})`;
+        else typeEl.textContent = `${node.type} (${node.category})`;
+    }
+    if (nameEl) {
+        if (nameEl.tagName === 'INPUT') nameEl.value = node.name || '';
+        else nameEl.textContent = node.name || '';
+    }
+    if (descEl) descEl.value = node.description || '';
+    if (failEl) failEl.value = node.failure_policy || 'ABORT';
+    if (timeoutEl) timeoutEl.value = node.timeout_seconds || 30;
+
+    // Render parameters JSON/Form
+    if (paramsContainer) {
+        paramsContainer.innerHTML = '';
+        const config = node.config || {};
+        const keys = Object.keys(config);
+
+        if (keys.length === 0) {
+            paramsContainer.innerHTML = '<div style="font-size:0.75rem; color:#64748B; font-style:italic;">No custom parameters required for this node.</div>';
+        } else {
+            keys.forEach(k => {
+                const val = config[k];
+                const field = document.createElement('div');
+                field.className = 'soar-config-field';
+                field.innerHTML = `
+                    <label class="soar-config-label">${escapeHtml(k)}</label>
+                    <input type="text" class="soar-config-input node-param-input" data-param-key="${escapeHtml(k)}" value="${escapeHtml(String(val))}">
+                `;
+                paramsContainer.appendChild(field);
+            });
+        }
+    }
+}
+
+function closeSoarConfigDrawer() {
+    const drawer = document.getElementById('soarNodeConfigDrawer') || document.getElementById('soarConfigDrawer');
+    if (drawer) {
+        drawer.classList.add('collapsed');
+        drawer.style.display = 'none';
+    }
+    soarSelectedNodeId = null;
+    document.querySelectorAll('.soar-node-card').forEach(c => c.classList.remove('selected'));
+}
+
+// Toolbar Action Aliases for HTML markup onclick handlers
+function soarCanvasAutoLayout() { autoLayoutSoarWorkflow(); }
+function soarCanvasFitView() { fitSoarCanvasView(); }
+function soarCanvasZoom(delta) { zoomSoarCanvas(delta); }
+function soarCanvasUndo() { soarUndo(); }
+function soarCanvasRedo() { soarRedo(); }
+function toggleAccessibleNodeList() { toggleSoarAccessibleView(); }
+function closeNodeConfigDrawer() { closeSoarConfigDrawer(); }
+function deleteSelectedNode() { deleteSelectedSoarNode(); }
+
+function saveSelectedNodeConfig() {
+    if (!soarSelectedNodeId) return;
+    const node = soarCanvasNodes.find(n => n.id === soarSelectedNodeId);
+    if (!node) return;
+
+    pushCanvasUndoState();
+
+    const nameEl = document.getElementById('soarConfigNodeName');
+    const descEl = document.getElementById('soarConfigNodeDesc');
+    const failEl = document.getElementById('soarConfigFailurePolicy');
+    const timeoutEl = document.getElementById('soarConfigTimeout');
+
+    if (nameEl) node.name = nameEl.value.trim() || node.name;
+    if (descEl) node.description = descEl.value.trim();
+    if (failEl) node.failure_policy = failEl.value;
+    if (timeoutEl) node.timeout_seconds = parseInt(timeoutEl.value, 10) || 30;
+
+    // Read params
+    const paramInputs = document.querySelectorAll('.node-param-input');
+    paramInputs.forEach(inp => {
+        const k = inp.getAttribute('data-param-key');
+        let v = inp.value.trim();
+        if (v === 'true') v = true;
+        else if (v === 'false') v = false;
+        else if (/^\d+$/.test(v)) v = parseInt(v, 10);
+        node.config[k] = v;
+    });
+
+    renderSoarCanvas();
+    renderSoarAccessibleList();
+    toastr.success(`Node [${node.name}] updated.`);
+}
+
+function deleteSelectedSoarNode() {
+    if (!soarSelectedNodeId) return;
+    const node = soarCanvasNodes.find(n => n.id === soarSelectedNodeId);
+    if (!node) return;
+
+    if (!confirm(`Delete node [${node.name}] and all connected wires?`)) return;
+
+    pushCanvasUndoState();
+    soarCanvasNodes = soarCanvasNodes.filter(n => n.id !== soarSelectedNodeId);
+    soarCanvasEdges = soarCanvasEdges.filter(e => e.source !== soarSelectedNodeId && e.target !== soarSelectedNodeId);
+
+    closeSoarConfigDrawer();
+    renderSoarCanvas();
+    renderSoarAccessibleList();
+    toastr.info(`Node [${node.name}] removed.`);
+}
+
+// -------------------------------------------------------------------------
+// 16.6 VALIDATION, DRY-RUN, DRAFT SAVING & PUBLISHING
+// -------------------------------------------------------------------------
+
+async function validateCurrentWorkflow() {
+    const playbookId = soarActivePlaybook ? soarActivePlaybook.playbook_id : 'NEW_PLAYBOOK';
+    toastr.info('Validating workflow DAG structure on backend...');
+
+    // Clear error highlights
+    document.querySelectorAll('.soar-node-card').forEach(c => c.classList.remove('has-error'));
+
+    try {
+        const res = await fetch('/api/soar/playbooks/validate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                playbook_id: playbookId,
+                definition: {
+                    nodes: soarCanvasNodes,
+                    edges: soarCanvasEdges
+                }
+            })
+        });
+        const data = await res.json();
+
+        if (data.is_valid) {
+            toastr.success('Workflow is completely VALID! DAG is acyclic and fully connected.');
+        } else {
+            toastr.error(`Validation found ${data.errors.length} issue(s). Review diagnostics.`);
+            // Highlight error nodes
+            (data.error_nodes || []).forEach(nid => {
+                const el = document.getElementById(`nodeEl_${nid}`);
+                if (el) el.classList.add('has-error');
+            });
+            openValidationDiagnosticsModal(data);
+        }
+        return data.is_valid;
+    } catch (err) {
+        toastr.error(`Validation error: ${err.message}`);
+        return false;
+    }
+}
+
+function openValidationDiagnosticsModal(data) {
+    const modal = document.getElementById('soarValidationResultModal');
+    const errList = document.getElementById('soarValidationErrorsList');
+    const warnList = document.getElementById('soarValidationWarningsList');
+    if (!modal) return;
+
+    if (errList) {
+        errList.innerHTML = (data.errors || []).map(err => `
+            <div class="soar-validation-error-item">
+                <i class="fa-solid fa-triangle-exclamation" style="color:#EF4444;"></i>
+                <span>${escapeHtml(err)}</span>
+            </div>
+        `).join('');
+    }
+
+    if (warnList) {
+        warnList.innerHTML = (data.warnings || []).map(w => `
+            <div class="soar-validation-warning-item">
+                <i class="fa-solid fa-circle-exclamation" style="color:#F59E0B;"></i>
+                <span>${escapeHtml(w)}</span>
+            </div>
+        `).join('');
+    }
+
+    modal.style.display = 'flex';
+}
+
+function closeValidationDiagnosticsModal() {
+    const modal = document.getElementById('soarValidationResultModal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function saveWorkflowDraft() {
+    if (!soarActivePlaybook) {
+        toastr.warning('Please select or create a playbook first.');
+        return;
+    }
+    const playbookId = soarActivePlaybook.playbook_id;
+    toastr.info('Saving workflow draft to database...');
+
+    try {
+        const res = await fetch(`/api/soar/playbooks/${encodeURIComponent(playbookId)}/versions/draft`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                nodes: soarCanvasNodes,
+                edges: soarCanvasEdges
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+
+        toastr.success(`Draft saved (v${data.version} DRAFT)`);
+        const verEl = document.getElementById('soarBuilderVersionTag');
+        if (verEl) verEl.textContent = `v${data.version} • DRAFT`;
+    } catch (err) {
+        toastr.error(`Failed saving draft: ${err.message}`);
+    }
+}
+
+async function publishCurrentWorkflow() {
+    if (!soarActivePlaybook) return;
+    const playbookId = soarActivePlaybook.playbook_id;
+
+    // Validate first
+    const isValid = await validateCurrentWorkflow();
+    if (!isValid) {
+        toastr.error('Cannot publish invalid workflow! Fix validation errors first.');
+        return;
+    }
+
+    if (!confirm(`Publish workflow ${playbookId}? This version will become active for real security incidents.`)) {
+        return;
+    }
+
+    try {
+        const res = await fetch(`/api/soar/playbooks/${encodeURIComponent(playbookId)}/publish`, {
+            method: 'POST'
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+
+        toastr.success(`Playbook published successfully! Active version: v${data.version}`);
+        const verEl = document.getElementById('soarBuilderVersionTag');
+        if (verEl) verEl.textContent = `v${data.version} • PUBLISHED`;
+        await loadSoarStats();
+        await loadSoarPlaybooks();
+    } catch (err) {
+        toastr.error(`Publishing failed: ${err.message}`);
+    }
+}
+
+async function dryRunCurrentWorkflow() {
+    if (!soarActivePlaybook) return;
+    const playbookId = soarActivePlaybook.playbook_id;
+
+    // Save draft first to ensure backend executes latest canvas state
+    await saveWorkflowDraft();
+
+    toastr.info(`Starting dry-run execution of ${playbookId}...`);
+    try {
+        const res = await fetch(`/api/soar/playbooks/${encodeURIComponent(playbookId)}/dry-run`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                trigger_payload: {
+                    source: 'CANVAS_SIMULATOR',
+                    source_ip: '198.51.100.42',
+                    severity: 'HIGH'
+                }
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+
+        toastr.success(`Dry-run simulation completed! ${data.executed_nodes_count} nodes executed safely.`);
+        switchSoarSubview('monitor');
+        inspectSoarExecution(data.execution_id);
+    } catch (err) {
+        toastr.error(`Dry-run failed: ${err.message}`);
+    }
+}
+
+// -------------------------------------------------------------------------
+// 16.7 EXECUTION MONITOR & TIMELINE
+// -------------------------------------------------------------------------
+
+async function loadSoarExecutions() {
+    const tbody = document.getElementById('soarExecutionsTableBody');
+    if (!tbody) return;
+
+    try {
+        const res = await fetch('/api/soar/executions?limit=30');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const execs = data.executions || [];
+
+        if (execs.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:30px; color:#64748B;">No execution records found. Run a playbook or dry-run to see telemetry.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = execs.map(ex => {
+            const statusClass = ex.status === 'COMPLETED' ? 'status-completed' :
+                               ex.status === 'RUNNING' ? 'status-running' :
+                               ex.status === 'WAITING_FOR_APPROVAL' ? 'status-waiting' :
+                               ex.status === 'FAILED' ? 'status-failed' : 'status-cancelled';
+
+            const dryRunBadge = ex.is_dry_run ? '<span class="soar-badge badge-amber" style="margin-left:6px;">DRY-RUN</span>' : '';
+            const duration = ex.duration_ms ? `${ex.duration_ms}ms` : '-';
+
+            return `
+                <tr style="cursor:pointer;" onclick="inspectSoarExecution('${escapeHtml(ex.execution_id)}')">
+                    <td class="font-mono text-cyan" style="font-weight:700;">
+                        ${escapeHtml(ex.execution_id)}
+                        ${dryRunBadge}
+                    </td>
+                    <td><strong>${escapeHtml(ex.playbook_id)}</strong> (v${ex.playbook_version})</td>
+                    <td><span class="soar-status-badge ${statusClass}">${escapeHtml(ex.status)}</span></td>
+                    <td>${escapeHtml(ex.trigger_source || 'API')}</td>
+                    <td class="font-mono">${escapeHtml(ex.related_incident_id || '-')}</td>
+                    <td class="font-mono">${duration}</td>
+                    <td class="font-mono text-muted">${formatAppSecTimestamp(ex.start_time)}</td>
+                </tr>
+            `;
+        }).join('');
+    } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:#EF4444;">Error loading executions: ${escapeHtml(err.message)}</td></tr>`;
+    }
+}
+
+async function inspectSoarExecution(executionId) {
+    soarActiveExecId = executionId;
+    const drawer = document.getElementById('soarExecDrawer');
+    if (!drawer) return;
+
+    drawer.style.display = 'block';
+    drawer.scrollIntoView({ behavior: 'smooth' });
+
+    try {
+        const res = await fetch(`/api/soar/executions/${encodeURIComponent(executionId)}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const exec = data.execution;
+        const nodes = data.nodes || [];
+
+        const idEl = document.getElementById('soarExecDrawerId');
+        const pbEl = document.getElementById('soarExecDrawerPlaybook');
+        const stEl = document.getElementById('soarExecDrawerStatus');
+        const durEl = document.getElementById('soarExecDrawerDuration');
+        const streamEl = document.getElementById('soarExecDrawerTimeline');
+
+        if (idEl) idEl.textContent = `${exec.execution_id} ${exec.is_dry_run ? '(DRY-RUN SIMULATION)' : ''}`;
+        if (pbEl) pbEl.textContent = `${exec.playbook_id} v${exec.playbook_version} • Trigger: ${exec.trigger_source || 'API'}`;
+        if (stEl) {
+            stEl.textContent = exec.status;
+            stEl.className = `soar-status-badge ${exec.status === 'COMPLETED' ? 'status-completed' : (exec.status === 'RUNNING' ? 'status-running' : (exec.status === 'WAITING_FOR_APPROVAL' ? 'status-waiting' : 'status-failed'))}`;
+        }
+        if (durEl) durEl.textContent = `Duration: ${exec.duration_ms || 0}ms • Started: ${formatAppSecTimestamp(exec.start_time)}`;
+
+        // Render timeline stream
+        if (streamEl) {
+            if (nodes.length === 0) {
+                streamEl.innerHTML = '<div style="color:#64748B; font-size:0.75rem;">No node executions logged.</div>';
+            } else {
+                streamEl.innerHTML = nodes.map(n => {
+                    const nodeClass = n.status === 'COMPLETED' ? 'node-completed' :
+                                      n.status === 'RUNNING' ? 'node-running' :
+                                      n.status === 'WAITING_FOR_APPROVAL' ? 'node-waiting' : 'node-failed';
+
+                    return `
+                        <div class="exec-node-item ${nodeClass}">
+                            <div class="exec-node-header">
+                                <span class="exec-node-title">
+                                    <i class="fa-solid fa-cube" style="margin-right:6px; color:#38BDF8;"></i>
+                                    ${escapeHtml(n.node_id)} (${escapeHtml(n.node_type)})
+                                </span>
+                                <span class="font-mono text-muted" style="font-size:0.7rem;">${n.duration_ms || 0}ms</span>
+                            </div>
+                            <div class="exec-node-details">Output: ${escapeHtml(JSON.stringify(n.output_data || {}, null, 2))}</div>
+                        </div>
+                    `;
+                }).join('');
+            }
+        }
+    } catch (err) {
+        toastr.error(`Failed inspecting execution: ${err.message}`);
+    }
+}
+
+function closeSoarExecDrawer() {
+    const drawer = document.getElementById('soarExecDrawer');
+    if (drawer) drawer.style.display = 'none';
+    soarActiveExecId = null;
+}
+
+// -------------------------------------------------------------------------
+// 16.8 APPROVAL CENTER
+// -------------------------------------------------------------------------
+
+async function loadSoarApprovals() {
+    const list = document.getElementById('soarPendingApprovalsContainer') || document.getElementById('soarApprovalsList');
+    if (!list) return;
+
+    try {
+        const res = await fetch('/api/soar/approvals/pending');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const pending = Array.isArray(data) ? data : (data.pending_approvals || []);
+        soarPendingApprovalsCache = pending;
+
+        // Update badge
+        const badge = document.getElementById('soarNavBadgePendingApprovals');
+        if (badge) {
+            badge.textContent = pending.length;
+            badge.style.display = (pending.length > 0) ? 'inline-flex' : 'none';
+        }
+
+        if (pending.length === 0) {
+            list.innerHTML = `
+                <div style="padding: 40px; text-align: center; background: #101722; border: 1px dashed #253344; border-radius: 8px;">
+                    <i class="fa-solid fa-circle-check fa-2x" style="color: #22C55E; margin-bottom: 10px;"></i>
+                    <div style="font-size: 0.95rem; font-weight: 700; color: #F1F5F9;">No Pending Approvals</div>
+                    <div style="font-size: 0.78rem; color: #94A3B8; margin-top: 4px;">All privileged response operations have been reviewed.</div>
+                </div>
+            `;
+            return;
+        }
+
+        list.innerHTML = pending.map(appr => {
+            return `
+                <div class="soar-approval-card pending">
+                    <div class="soar-approval-card-header">
+                        <div>
+                            <span class="soar-badge badge-amber" style="margin-right:8px;">PENDING APPROVAL</span>
+                            <strong style="color:#F1F5F9; font-size:0.95rem;">${escapeHtml(appr.action_name || 'Privileged Security Action')}</strong>
+                            <span class="font-mono text-muted" style="font-size:0.7rem; margin-left:8px;">${escapeHtml(appr.approval_id)}</span>
+                        </div>
+                        <span class="font-mono text-muted" style="font-size:0.75rem;">${formatAppSecTimestamp(appr.created_at)}</span>
+                    </div>
+
+                    <div style="font-size:0.78rem; color:#94A3B8; margin-top:6px;">
+                        Execution ID: <strong class="font-mono text-cyan">${escapeHtml(appr.execution_id)}</strong> • Node: <code>${escapeHtml(appr.node_id)}</code>
+                        ${appr.incident_id ? `• Incident: <strong class="font-mono text-warning">${escapeHtml(appr.incident_id)}</strong>` : ''}
+                    </div>
+
+                    <div class="soar-approval-action-summary">
+                        ${escapeHtml(appr.action_description || 'Execution paused for high-impact privileged containment action authorization.')}
+                    </div>
+
+                    <div class="soar-approval-actions">
+                        <button type="button" class="btn btn-outline btn-sm" onclick="openApprovalDecisionModal('${escapeHtml(appr.approval_id)}', 'REJECTED')" style="border-color:#EF4444; color:#EF4444;">
+                            <i class="fa-solid fa-xmark"></i> Reject
+                        </button>
+                        <button type="button" class="btn btn-primary btn-sm" onclick="openApprovalDecisionModal('${escapeHtml(appr.approval_id)}', 'APPROVED')" style="background:#22C55E; border-color:#22C55E; color:#000;">
+                            <i class="fa-solid fa-check"></i> Authorize & Resume
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    } catch (err) {
+        list.innerHTML = `<div style="padding:20px; color:#EF4444;">Failed to load approvals: ${escapeHtml(err.message)}</div>`;
+    }
+}
+
+function openApprovalDecisionModal(approvalId, decision) {
+    const modal = document.getElementById('soarApprovalModal');
+    const idHidden = document.getElementById('soarApprovalId');
+    const decHidden = document.getElementById('soarApprovalDecision');
+    const titleEl = document.getElementById('soarApprovalModalTitle');
+
+    if (idHidden) idHidden.value = approvalId;
+    if (decHidden) decHidden.value = decision;
+    if (titleEl) titleEl.textContent = decision === 'APPROVED' ? 'Authorize Privileged Response Action' : 'Reject Response Action';
+
+    if (modal) modal.style.display = 'flex';
+}
+
+function closeApprovalDecisionModal() {
+    const modal = document.getElementById('soarApprovalModal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function submitApprovalDecision(e) {
+    if (e) e.preventDefault();
+    const approvalId = document.getElementById('soarApprovalId')?.value;
+    const decision = document.getElementById('soarApprovalDecision')?.value;
+    const reason = document.getElementById('soarApprovalReason')?.value || '';
+
+    if (!approvalId || !decision) return;
+
+    if (decision === 'REJECTED' && !reason.trim()) {
+        toastr.warning('Please provide a mandatory justification reason for rejection.');
+        return;
+    }
+
+    try {
+        const res = await fetch(`/api/soar/approvals/${encodeURIComponent(approvalId)}/decide`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                decision: decision,
+                reason: reason
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+
+        closeApprovalDecisionModal();
+        toastr.success(`Approval decision recorded: ${decision}`);
+        await loadSoarApprovals();
+        await loadSoarStats();
+
+        // Switch to monitor to see resumed execution
+        if (data.execution_id) {
+            switchSoarSubview('monitor');
+            inspectSoarExecution(data.execution_id);
+        }
+    } catch (err) {
+        toastr.error(`Decision submission failed: ${err.message}`);
+    }
+}
+
+// -------------------------------------------------------------------------
+// 16.9 AUDIT HISTORY & ACCESSIBLE VIEW
+// -------------------------------------------------------------------------
+
+async function loadSoarAuditLogs() {
+    const tbody = document.getElementById('soarAuditLogsTableBody') || document.getElementById('soarAuditTableBody');
+    if (!tbody) return;
+
+    try {
+        const res = await fetch('/api/soar/audit-logs?limit=50');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const logs = data.audit_logs || [];
+
+        if (logs.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px; color:#64748B;">No audit entries recorded yet.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = logs.map(l => {
+            return `
+                <tr>
+                    <td class="font-mono text-muted">${formatAppSecTimestamp(l.timestamp)}</td>
+                    <td><strong style="color:#F1F5F9;">${escapeHtml(l.action_type)}</strong></td>
+                    <td class="font-mono text-cyan">${escapeHtml(l.playbook_id || '-')}</td>
+                    <td class="font-mono">${escapeHtml(l.execution_id || '-')}</td>
+                    <td style="color:#A78BFA;">${escapeHtml(l.actor || 'system')}</td>
+                    <td style="font-size:0.75rem; color:#94A3B8;">${escapeHtml(l.details || '-')}</td>
+                </tr>
+            `;
+        }).join('');
+    } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:#EF4444;">Error loading audit logs: ${escapeHtml(err.message)}</td></tr>`;
+    }
+}
+
+function toggleSoarAccessibleView() {
+    const view = document.getElementById('soarAccessibleView');
+    const canvasCont = document.getElementById('soarCanvasContainer');
+    if (!view || !canvasCont) return;
+
+    const isVisible = view.style.display !== 'none';
+    if (isVisible) {
+        view.style.display = 'none';
+        canvasCont.style.display = 'block';
+    } else {
+        view.style.display = 'block';
+        canvasCont.style.display = 'none';
+        renderSoarAccessibleList();
+    }
+}
+
+function renderSoarAccessibleList() {
+    const container = document.getElementById('soarAccessibleNodeList');
+    const tableBody = document.getElementById('soarAccessibleTableBody');
+
+    if (container) {
+        if (soarCanvasNodes.length === 0) {
+            container.innerHTML = '<div style="color:#64748B; font-style:italic;">No workflow nodes defined. Add nodes from the palette.</div>';
+        } else {
+            container.innerHTML = soarCanvasNodes.map((node, idx) => {
+                const outgoingEdges = soarCanvasEdges.filter(e => e.source === node.id);
+                const targets = outgoingEdges.map(e => `${e.target} (${e.source_handle})`).join(', ') || 'None (Terminal)';
+
+                return `
+                    <div class="soar-accessible-node-row">
+                        <div>
+                            <strong style="color:#F1F5F9;">${idx + 1}. ${escapeHtml(node.name)}</strong>
+                            <span class="font-mono text-cyan" style="font-size:0.7rem; margin-left:8px;">[${escapeHtml(node.id)}]</span>
+                            <div style="font-size:0.72rem; color:#94A3B8; margin-top:3px;">
+                                Type: <code>${escapeHtml(node.type)}</code> • Outgoing Connections: <strong>${escapeHtml(targets)}</strong>
+                            </div>
+                        </div>
+                        <div style="display:flex; gap:6px;">
+                            <button type="button" class="btn btn-outline btn-sm" onclick="selectSoarNode('${escapeHtml(node.id)}')" style="font-size:0.72rem;">
+                                <i class="fa-solid fa-sliders"></i> Configure
+                            </button>
+                            <button type="button" class="btn btn-outline btn-sm" onclick="soarSelectedNodeId='${escapeHtml(node.id)}'; deleteSelectedSoarNode();" style="font-size:0.72rem; color:#EF4444; border-color:#EF4444;">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+    }
+
+    if (tableBody) {
+        if (soarCanvasNodes.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px; color:#64748B;">No workflow nodes defined.</td></tr>';
+        } else {
+            tableBody.innerHTML = soarCanvasNodes.map((node, idx) => {
+                const outgoingEdges = soarCanvasEdges.filter(e => e.source === node.id);
+                const targets = outgoingEdges.map(e => `${e.target} (${e.source_handle})`).join(', ') || 'Terminal';
+                return `
+                    <tr>
+                        <td class="font-mono" style="font-weight:700;">${idx + 1}</td>
+                        <td class="font-mono text-cyan">${escapeHtml(node.id)}</td>
+                        <td><strong>${escapeHtml(node.name)}</strong></td>
+                        <td><span class="soar-badge badge-purple">${escapeHtml(node.category)}</span></td>
+                        <td class="font-mono" style="font-size:0.7rem;">${escapeHtml(JSON.stringify(node.config || {}))}</td>
+                        <td class="font-mono">${escapeHtml(targets)}</td>
+                        <td>
+                            <button type="button" class="btn btn-outline btn-sm" onclick="selectSoarNode('${escapeHtml(node.id)}')" style="font-size:0.7rem;">
+                                <i class="fa-solid fa-sliders"></i> Configure
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+    }
+}
+
 
