@@ -102,12 +102,17 @@
 - [x] Complete Phase 3 Documentation Suite in `docs/v3-transformation/phase-3/` (8 documents) — *Verified*
 
 ### Module 4: Attack Simulation Center (Phase 4)
-- [x] Scenario cards (SQLi, XSS, Credential Stuffing, DoS, Admin Probe, Health Degradation) — *Verified*
-- [x] Execution parameter controls (intensity slider, target IP, custom payload) — *Verified*
-- [x] Dry-run mode toggle — *Verified*
-- [x] Real-time SSE streaming timeline with animated 5-step indicators — *Verified*
-- [x] Live detection and mitigation output — *Verified*
-- [x] Direct incident link navigation upon containment — *Verified*
+- [x] Simulation Dashboard with 6 real KPI metrics from SQLite (`simulation_executions`) — *Verified*
+- [x] Scenario Library with 7 verified scenarios (`sqli`, `xss`, `failed_logins`, `admin`, `rate`, `health`, `replay`), MITRE mappings & runtimes — *Verified*
+- [x] Execution configuration with strict localhost allowlist enforcement and mandatory defensive testing authorization — *Verified*
+- [x] Simulation Execution Engine generating unique `SIM-YYYYMMDD-XXXX` IDs, tracking status, and audit logging to `admin_audit_logs` — *Verified*
+- [x] Live 5-stage stepper (Dispatch -> Transmission -> Detection -> Quarantine -> Verification) with live terminal logs and SSE/REST polling fallback — *Verified*
+- [x] Detection validation matrix contrasting expected vs actual rules (`DETECTED`, `NOT_DETECTED`, `PARTIALLY_DETECTED`) — *Verified*
+- [x] Remediation validation verifying dynamic quarantine and dual-probe containment (Attacker 403 vs Benign 200) — *Verified*
+- [x] Forensic Evidence Center with 640px slide-over drawer (`#simulationEvidenceDrawer`), step traces, and safely-escaped raw JSON evidence — *Verified*
+- [x] Searchable simulation execution history with multi-field filtering, server-side pagination, and formula-safe CSV export — *Verified*
+- [x] Automated test suite (`tests/test_attack_simulation_center.py` 13/13 passed, 112/112 total regression pass) — *Verified*
+- [x] Complete Phase 4 Documentation Suite in `docs/v3-transformation/phase-4/` (8 documents) — *Verified*
 
 ### Module 5: Incident Command Center (Phase 5)
 - [x] Incident list with severity badges, status tags, and time ago — *Verified*

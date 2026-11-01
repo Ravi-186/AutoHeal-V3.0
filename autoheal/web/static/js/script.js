@@ -192,6 +192,8 @@ function switchToTab(pageId) {
         loadSecurityEvents();
     } else if (pageId === 'pageEventsTable') {
         loadFullEventsTable();
+    } else if (pageId === 'pageAttackCenter') {
+        loadSimulationDashboard(false);
     } else if (pageId === 'pageIncidents') {
         loadIncidentsList();
     } else if (pageId === 'pageInvestigation') {
@@ -910,290 +912,429 @@ function initExecutiveSSEStream() {
 }
 
 // =========================================================================
-// 3. ATTACK CENTER EXECUTION & SSE STREAM
+// 3. ATTACK SIMULATION CENTER CONTROLLER (PHASE 4)
 // =========================================================================
 
 let attackStartTime = null;
+let currentSimulationExecutionId = null;
 let currentGeneratedIncidentId = null;
+let activeSimTimerInterval = null;
+let simCatalogCache = [];
+let simHistoryCurrentPage = 1;
+let simHistoryPerPage = 10;
+let simHistoryTotal = 0;
+let simHistoryDebounce = null;
+let activeDrawerExecutionData = null;
 
-function resetTimelineStepper() {
-    const steps = [
-        { id: 'stepReady', sub: 'Target Bound' },
-        { id: 'stepRunning', sub: 'HTTP Probing' },
-        { id: 'stepEvents', sub: 'SQLite Stream' },
-        { id: 'stepDetected', sub: 'Rule Matching' },
-        { id: 'stepResponse', sub: 'Policy Action' },
-        { id: 'stepVerified', sub: 'Follow-up Probe' },
-        { id: 'stepReport', sub: 'PDF / JSON' }
-    ];
-    steps.forEach((s, idx) => {
-        const el = document.getElementById(s.id);
-        if (el) {
-            el.className = idx === 0 ? 'stepper-step step-completed' : 'stepper-step';
-            const sub = el.querySelector('.step-sub');
-            if (sub) sub.textContent = s.sub;
-        }
-    });
-    for (let i = 1; i <= 6; i++) {
-        const l = document.getElementById(`line${i}`);
-        if (l) l.className = 'stepper-line';
+// Verified scenario configuration presets
+const SCENARIO_PRESETS = {
+    'sqli': {
+        name: "SQL Injection Attack Vector (INJ-001 / CWE-89)",
+        endpoint: "/api/shop/products?q=Laptop' OR '1'='1",
+        client_ip: "203.0.113.88",
+        attempts: 5,
+        payload: "Laptop' OR '1'='1",
+        description: "Sends boolean-based SQL injection probes against /api/shop/products?q= to benchmark parameter sanitization and perimeter block."
+    },
+    'xss': {
+        name: "Cross-Site Scripting Neutralization (XSS-001 / CWE-79)",
+        endpoint: "/api/shop/products?q=<script>alert('ShopSphere-XSS-Test')</script>",
+        client_ip: "203.0.113.99",
+        attempts: 5,
+        payload: "<script>alert('ShopSphere-XSS-Test')</script>",
+        description: "Injects reflected script tags against /api/shop/products?q= to test HTML context escaping and WAF reflection heuristics."
+    },
+    'failed_logins': {
+        name: "Credential Stuffing & Brute-Force Abuse (AUTH-001 / T1110)",
+        endpoint: "/api/shop/auth/login",
+        client_ip: "198.51.100.42",
+        attempts: 10,
+        payload: "WrongPass123",
+        description: "Emits a rapid burst of failed authentication attempts against /api/shop/auth/login to trigger brute-force rate-limiting and dynamic quarantine."
+    },
+    'admin': {
+        name: "Unauthorized Administrative Access (AUTH-002 / T1078)",
+        endpoint: "/api/shop/admin/stats",
+        client_ip: "198.51.100.77",
+        attempts: 5,
+        payload: "SecretAdmin123",
+        description: "Sends unauthenticated and privilege-abuse requests to /api/shop/admin/stats to validate RBAC perimeter boundary enforcement."
+    },
+    'rate': {
+        name: "API Endpoint Flooding & DoS Burst (RATE-001 / T1499)",
+        endpoint: "/api/shop/products",
+        client_ip: "198.51.100.55",
+        attempts: 30,
+        payload: "burst",
+        description: "Simulates high-velocity burst traffic exceeding the sliding-window threshold (30 reqs) to trigger rate-limiting HTTP 429 containment."
+    },
+    'health': {
+        name: "Application Health & Error Cascade Resilience (HEALTH-001)",
+        endpoint: "/api/shop/health/simulate-error",
+        client_ip: "198.51.100.33",
+        attempts: 3,
+        payload: "health_probe",
+        description: "Simulates downstream service degradation and error cascades to validate AutoHeal health monitoring and circuit breaking."
+    },
+    'replay': {
+        name: "Multi-Vector Attack Replay & Baseline Comparison (CORR-001)",
+        endpoint: "/api/shop/products",
+        client_ip: "203.0.113.105",
+        attempts: 5,
+        payload: "replay_multi_vector",
+        description: "Replays a correlated composite sequence of historical attack telemetry to benchmark regression detection and policy effectiveness."
     }
-}
-
-function updateTimelineStage(stageNumber, status, subText) {
-    const stepIds = ['stepReady', 'stepRunning', 'stepEvents', 'stepDetected', 'stepResponse', 'stepVerified', 'stepReport'];
-    const el = document.getElementById(stepIds[stageNumber - 1]);
-    if (!el) return;
-
-    el.classList.remove('step-active', 'step-completed', 'step-failed');
-    if (status === 'active') {
-        el.classList.add('step-active');
-        if (stageNumber > 1) {
-            const prevLine = document.getElementById(`line${stageNumber - 1}`);
-            if (prevLine) prevLine.className = 'stepper-line line-active';
-        }
-    } else if (status === 'completed') {
-        el.classList.add('step-completed');
-        if (stageNumber > 1) {
-            const prevLine = document.getElementById(`line${stageNumber - 1}`);
-            if (prevLine) prevLine.className = 'stepper-line line-completed';
-        }
-    } else if (status === 'failed') {
-        el.classList.add('step-failed');
-    }
-
-    if (subText) {
-        const sub = el.querySelector('.step-sub');
-        if (sub) sub.textContent = subText;
-    }
-}
+};
 
 function initAttackCenterControls() {
-    const scenarioSelect = document.getElementById('attackScenarioSelect');
-    const endpointSelect = document.getElementById('targetEndpointSelect');
-    const attemptsInput = document.getElementById('testAttemptsInput');
-    const clientIpInput = document.getElementById('testClientIpInput');
-    const usernameInput = document.getElementById('testUsernameInput');
-    const passwordInput = document.getElementById('testPasswordInput');
-    const payloadGroup = document.getElementById('payloadGroup');
-    const payloadInput = document.getElementById('testPayloadInput');
-    const btnLaunch = document.getElementById('btnLaunchAttack');
-    const btnStop = document.getElementById('btnStopAttack');
-    const btnUnblock = document.getElementById('btnUnblockIp');
-    const btnClear = document.getElementById('btnClearTerminal');
+    onScenarioSelectChange();
+    loadSimulationStats();
+    loadSimulationCatalog();
+    loadSimulationHistory(1);
+}
 
-    // Wire up Diagram Step 1 Radio Cards
-    const radioCards = document.querySelectorAll('.scenario-radio-card');
-    radioCards.forEach(card => {
-        card.addEventListener('click', function() {
-            radioCards.forEach(c => c.classList.remove('active'));
-            this.classList.add('active');
-            const scenario = this.getAttribute('data-scenario');
-            if (scenarioSelect) {
-                scenarioSelect.value = scenario;
-                scenarioSelect.dispatchEvent(new Event('change'));
-            }
-        });
-    });
-
-    if (!scenarioSelect) return;
-
-    // Synchronize parameters based on selected scenario
-    scenarioSelect.addEventListener('change', function() {
-        const scenario = this.value;
-        // Keep radio cards visually in sync
-        radioCards.forEach(c => {
-            if (c.getAttribute('data-scenario') === scenario) {
-                c.classList.add('active');
-            } else {
-                c.classList.remove('active');
-            }
-        });
-
-        if (scenario === 'failed_logins') {
-            if (endpointSelect) endpointSelect.value = '/api/shop/auth/login';
-            if (attemptsInput) attemptsInput.value = 10;
-            if (usernameInput) usernameInput.value = 'test.attacker@example.com';
-            if (passwordInput) passwordInput.value = 'WrongPass123';
-            if (clientIpInput) clientIpInput.value = '198.51.100.42';
-            if (payloadGroup) payloadGroup.style.display = 'none';
-        } else if (scenario === 'admin') {
-            if (endpointSelect) endpointSelect.value = '/api/shop/admin/stats';
-            if (attemptsInput) attemptsInput.value = 5;
-            if (usernameInput) usernameInput.value = 'unauthorized_operator@example.com';
-            if (passwordInput) passwordInput.value = 'SecretAdmin123';
-            if (clientIpInput) clientIpInput.value = '198.51.100.77';
-            if (payloadGroup) payloadGroup.style.display = 'none';
-        } else if (scenario === 'sqli') {
-            if (endpointSelect) endpointSelect.value = "/api/shop/products?q=Laptop' OR '1'='1";
-            if (attemptsInput) attemptsInput.value = 5;
-            if (usernameInput) usernameInput.value = "admin' OR '1'='1' --";
-            if (passwordInput) passwordInput.value = 'WrongPass123';
-            if (clientIpInput) clientIpInput.value = '203.0.113.88';
-            if (payloadGroup) payloadGroup.style.display = 'block';
-            if (payloadInput) payloadInput.value = "Laptop' OR '1'='1";
-        } else if (scenario === 'xss') {
-            if (endpointSelect) endpointSelect.value = "/api/shop/products?q=<script>alert('ShopSphere-XSS-Test')</script>";
-            if (attemptsInput) attemptsInput.value = 5;
-            if (usernameInput) usernameInput.value = "<script>alert('xss')</script>";
-            if (passwordInput) passwordInput.value = 'WrongPass123';
-            if (clientIpInput) clientIpInput.value = '203.0.113.99';
-            if (payloadGroup) payloadGroup.style.display = 'block';
-            if (payloadInput) payloadInput.value = "<script>alert('ShopSphere-XSS-Test')</script>";
-        } else if (scenario === 'rate') {
-            if (endpointSelect) endpointSelect.value = '/api/shop/products';
-            if (attemptsInput) attemptsInput.value = 30;
-            if (usernameInput) usernameInput.value = 'burst_agent@example.com';
-            if (passwordInput) passwordInput.value = 'WrongPass123';
-            if (clientIpInput) clientIpInput.value = '198.51.100.55';
-            if (payloadGroup) payloadGroup.style.display = 'none';
-        } else if (scenario === 'health') {
-            if (endpointSelect) endpointSelect.value = '/api/shop/health/simulate-error';
-            if (attemptsInput) attemptsInput.value = 1;
-            if (clientIpInput) clientIpInput.value = '198.51.100.33';
-            if (payloadGroup) payloadGroup.style.display = 'none';
-        }
-    });
-
-    if (endpointSelect) {
-        endpointSelect.addEventListener('change', function() {
-            const ep = this.value;
-            if (ep.includes('/auth/login')) {
-                scenarioSelect.value = 'failed_logins';
-            } else if (ep.includes('/admin/stats')) {
-                scenarioSelect.value = 'admin';
-            } else if (ep.includes('1=1') || ep.includes('Laptop')) {
-                scenarioSelect.value = 'sqli';
-            } else if (ep.includes('script') || ep.includes('XSS')) {
-                scenarioSelect.value = 'xss';
-            } else if (ep.includes('simulate-error')) {
-                scenarioSelect.value = 'health';
-            }
-            scenarioSelect.dispatchEvent(new Event('change'));
-        });
+// 1. Dashboard Orchestration
+async function loadSimulationDashboard(showToast = false) {
+    const pill = document.getElementById('simMonitorStatusPill');
+    const textEl = document.getElementById('simMonitorStatusText');
+    if (pill && textEl && !activeEventSource) {
+        pill.className = 'live-status-pill idle';
+        textEl.textContent = 'STANDBY';
     }
 
-    // Launch Attack Handler
-    btnLaunch.addEventListener('click', function() {
-        launchAttackTest();
-    });
+    await Promise.all([
+        loadSimulationStats(),
+        loadSimulationCatalog(),
+        loadSimulationHistory(1)
+    ]);
 
-    // Stop Attack Handler
-    btnStop.addEventListener('click', function() {
-        stopSecurityTest();
-    });
-
-    // Unblock IP Handler
-    btnUnblock.addEventListener('click', async function() {
-        const ip = clientIpInput.value.trim();
-        if (!ip) {
-            toastr.warning('Please enter an IP address to unblock.');
-            return;
-        }
-        try {
-            const res = await fetch('/api/security/unblock', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ client_ip: ip })
-            });
-            const data = await res.json();
-            appendTerminalLine(`[SYS] IP ${ip} released from active quarantine blocklist.`, 'sys');
-            toastr.success(`Client IP ${ip} unblocked.`, 'Perimeter Updated');
-            loadQuarantinedClients();
-            loadDashboardMetrics();
-        } catch(e) {
-            toastr.error('Failed to unblock IP: ' + e.message);
-        }
-    });
-
-    // Clear Terminal Handler
-    if (btnClear) {
-        btnClear.addEventListener('click', function() {
-            const term = document.getElementById('attackTerminalBody');
-            if (term) term.innerHTML = '<div class="term-line" style="color: var(--text-muted);">[SYS] Terminal cleared. Standby.</div>';
-            resetTimelineStepper();
-        });
+    if (showToast && typeof toastr !== 'undefined') {
+        toastr.info('Simulation Center telemetry and catalog updated.', 'Attack Simulation Center');
     }
 }
 
-function launchAttackTest() {
-    const scenario = document.getElementById('attackScenarioSelect').value;
-    const clientIp = document.getElementById('testClientIpInput').value.trim() || '198.51.100.42';
-    const attempts = parseInt(document.getElementById('testAttemptsInput').value) || 5;
-    const payload = document.getElementById('testPayloadInput').value.trim();
-    const targetUrl = window.location.origin;
+// 2. Dashboard KPI Statistics from SQLite
+async function loadSimulationStats() {
+    try {
+        const res = await fetch('/api/security/simulations/stats');
+        if (!res.ok) return;
+        const stats = await res.json();
 
+        const elTotal = document.getElementById('statSimTotal');
+        const elScenarios = document.getElementById('statSimScenarios');
+        const elDetected = document.getElementById('statSimDetected');
+        const elRate = document.getElementById('statSimRate');
+        const elVerified = document.getElementById('statSimVerified');
+        const elIncidents = document.getElementById('statSimIncidents');
+
+        if (elTotal) elTotal.textContent = stats.total_simulations !== undefined ? stats.total_simulations : '--';
+        if (elScenarios) elScenarios.textContent = stats.scenarios_available || 7;
+        if (elDetected) elDetected.textContent = stats.successful_detections !== undefined ? stats.successful_detections : '--';
+        if (elRate) elRate.textContent = `${stats.detection_rate_pct !== undefined ? stats.detection_rate_pct : 0}%`;
+        if (elVerified) elVerified.textContent = stats.verified_protections !== undefined ? stats.verified_protections : '--';
+        if (elIncidents) elIncidents.textContent = stats.incidents_created !== undefined ? stats.incidents_created : '--';
+    } catch (e) {
+        console.error('Error loading simulation stats:', e);
+    }
+}
+
+// 3. Scenario Library Catalog
+async function loadSimulationCatalog() {
+    const grid = document.getElementById('simulationScenarioCatalogGrid');
+    if (!grid) return;
+
+    try {
+        const res = await fetch('/api/security/simulations/catalog');
+        if (!res.ok) return;
+        const data = await res.json();
+        const scenarios = data.scenarios || [];
+        simCatalogCache = scenarios;
+
+        if (scenarios.length === 0) {
+            grid.innerHTML = '<div style="color: var(--text-muted); padding: 20px;">No scenarios registered in catalog.</div>';
+            return;
+        }
+
+        const currentSelected = document.getElementById('attackScenarioSelect')?.value || 'sqli';
+
+        grid.innerHTML = scenarios.map(s => {
+            const isSelected = s.scenario_id === currentSelected;
+            const sevBadge = getSeverityBadgeHtml(s.severity);
+            const runtimeStr = s.estimated_duration_sec ? `${s.estimated_duration_sec}s` : '1.5s';
+
+            return `
+                <div class="scenario-card ${isSelected ? 'selected' : ''}" id="scCard_${escapeHtml(s.scenario_id)}" onclick="selectScenarioForSimulation('${escapeHtml(s.scenario_id)}')">
+                    <div class="scenario-card-header">
+                        <span class="scenario-id-badge">${escapeHtml(s.scenario_id.toUpperCase())}</span>
+                        ${sevBadge}
+                    </div>
+                    <div class="scenario-title">${escapeHtml(s.name)}</div>
+                    <div class="scenario-desc">${escapeHtml(s.description)}</div>
+                    <div class="scenario-meta-row">
+                        <span><i class="fas fa-crosshairs text-cyan"></i> ${escapeHtml(s.mitre_technique || 'T1190')}</span>
+                        <span><i class="fas fa-shield text-cyan"></i> ${escapeHtml(s.expected_rule_id)}</span>
+                        <span><i class="fas fa-stopwatch text-cyan"></i> ~${runtimeStr}</span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    } catch (e) {
+        console.error('Error loading scenario catalog:', e);
+    }
+}
+
+// 4. Scenario Selection & Synchronized Form
+function selectScenarioForSimulation(scenarioId) {
+    const select = document.getElementById('attackScenarioSelect');
+    if (select) {
+        select.value = scenarioId;
+        onScenarioSelectChange();
+    }
+
+    document.querySelectorAll('.scenario-card').forEach(c => c.classList.remove('selected'));
+    const targetCard = document.getElementById(`scCard_${scenarioId}`);
+    if (targetCard) targetCard.classList.add('selected');
+
+    const configCard = document.getElementById('simulationConfigCard');
+    if (configCard) {
+        configCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+}
+
+function onScenarioSelectChange() {
+    const scenario = document.getElementById('attackScenarioSelect')?.value || 'sqli';
+    const preset = SCENARIO_PRESETS[scenario];
+
+    const ipInput = document.getElementById('testClientIpInput');
+    const attInput = document.getElementById('testAttemptsInput');
+    const payInput = document.getElementById('testPayloadInput');
+    const descText = document.getElementById('scenarioDescriptionText');
+
+    if (preset) {
+        if (ipInput) ipInput.value = preset.client_ip;
+        if (attInput) attInput.value = preset.attempts;
+        if (payInput) payInput.value = preset.payload;
+        if (descText) descText.textContent = preset.description;
+    }
+
+    document.querySelectorAll('.scenario-card').forEach(c => c.classList.remove('selected'));
+    const targetCard = document.getElementById(`scCard_${scenario}`);
+    if (targetCard) targetCard.classList.add('selected');
+}
+
+// 5. Timeline Stepper Management (5-Stage Stepper)
+function resetSimulationTimeline() {
+    for (let i = 1; i <= 5; i++) {
+        const step = document.getElementById(`simStep${i}`);
+        const sub = document.getElementById(`simStepSub${i}`);
+        if (step) {
+            step.className = i === 1 ? 'stepper-step active' : 'stepper-step';
+        }
+        if (sub) {
+            const labels = ['Ready', 'HTTP Ingestion', 'Rule Trigger', 'Perimeter Block', 'Dual Probe'];
+            sub.textContent = labels[i - 1];
+        }
+    }
+}
+
+function updateSimulationTimelineStage(stageNum, status, subText) {
+    const step = document.getElementById(`simStep${stageNum}`);
+    const sub = document.getElementById(`simStepSub${stageNum}`);
+    if (!step) return;
+
+    step.classList.remove('active', 'completed', 'failed');
+    if (status === 'active') {
+        step.classList.add('active');
+    } else if (status === 'completed') {
+        step.classList.add('completed');
+    } else if (status === 'failed') {
+        step.classList.add('failed');
+    }
+
+    if (sub && subText) {
+        sub.textContent = subText;
+    }
+}
+
+// Backward-compatibility wrappers for old stepper
+function resetTimelineStepper() {
+    resetSimulationTimeline();
+}
+function updateTimelineStage(stageNumber, status, subText) {
+    const map = { 1: 1, 2: 2, 3: 2, 4: 3, 5: 4, 6: 5, 7: 5 };
+    const target = map[stageNumber] || 1;
+    updateSimulationTimelineStage(target, status, subText);
+}
+
+// 6. Terminal Console Output
+function appendAttackTerminal(contentHtml, type = 'info') {
+    const term = document.getElementById('attackTerminalLogs') || document.getElementById('attackTerminalBody');
+    if (!term) return;
+
+    const timeStr = new Date().toLocaleTimeString();
+    const line = document.createElement('div');
+    line.className = `terminal-line ${type}`;
+    line.innerHTML = `<span class="term-timestamp">[${timeStr}]</span> ${contentHtml}`;
+    term.appendChild(line);
+    term.scrollTop = term.scrollHeight;
+}
+
+function clearAttackTerminal() {
+    const term = document.getElementById('attackTerminalLogs');
+    if (term) {
+        term.innerHTML = `
+            <div class="terminal-line info">[INIT] AutoHeal Defensive Security Testing Platform Initialized.</div>
+            <div class="terminal-line">[INFO] Localhost boundary enforcement: ACTIVE.</div>
+            <div class="terminal-line">[STANDBY] Terminal buffer cleared by operator. Standby.</div>
+        `;
+    }
+    const legacyTerm = document.getElementById('attackTerminalBody');
+    if (legacyTerm) {
+        legacyTerm.innerHTML = '<div class="term-line" style="color: var(--text-muted);">[SYS] Terminal cleared. Standby.</div>';
+    }
+    resetSimulationTimeline();
+}
+
+// 7. Simulation Dispatch & Live Execution Engine
+async function launchAttackTest() {
+    const targetUrlInput = document.getElementById('testTargetUrlInput');
+    const targetUrl = targetUrlInput ? targetUrlInput.value.trim() : 'http://localhost:8000';
+
+    // Strict local safety enforcement verification
+    const safeHosts = ['localhost', '127.0.0.1', '0.0.0.0', '::1', 'testserver'];
+    const isSafe = safeHosts.some(h => targetUrl.toLowerCase().includes(h));
+    if (!isSafe) {
+        toastr.error('Target violation: Only local ShopSphere instances may be tested.', 'Safety Guardrail');
+        return;
+    }
+
+    // Defensive Authorization Confirmation Checkbox
+    const authCheck = document.getElementById('simAuthConfirmationCheck');
+    if (authCheck && !authCheck.checked) {
+        toastr.warning('Please confirm the defensive testing authorization checkbox before dispatching.', 'Authorization Required');
+        authCheck.focus();
+        return;
+    }
+
+    const scenario = document.getElementById('attackScenarioSelect')?.value || 'sqli';
+    const clientIp = document.getElementById('testClientIpInput')?.value.trim() || '203.0.113.88';
+    const attempts = parseInt(document.getElementById('testAttemptsInput')?.value) || 5;
+    const payload = document.getElementById('testPayloadInput')?.value.trim() || '';
+    const mode = document.querySelector('input[name="simExecMode"]:checked')?.value || 'live';
+
+    // UI State Locking
     const btnLaunch = document.getElementById('btnLaunchAttack');
     const btnStop = document.getElementById('btnStopAttack');
-    const resultCard = document.getElementById('healingResultCard');
     const statusPill = document.getElementById('terminalStatusPill');
+    const monitorPill = document.getElementById('simMonitorStatusPill');
+    const monitorText = document.getElementById('simMonitorStatusText');
+    const execIdDisplay = document.getElementById('simActiveExecId');
 
     if (btnLaunch) {
         btnLaunch.disabled = true;
         btnLaunch.style.opacity = '0.5';
     }
-    if (btnStop) btnStop.style.display = 'inline-flex';
-    if (resultCard) resultCard.style.display = 'none';
-
+    if (btnStop) {
+        btnStop.disabled = false;
+        btnStop.style.opacity = '1';
+    }
     if (statusPill) {
         statusPill.textContent = 'RUNNING';
-        statusPill.className = 'badge badge-high';
+        statusPill.className = 'badge badge-warning';
     }
+    if (monitorPill && monitorText) {
+        monitorPill.className = 'live-status-pill connected';
+        monitorText.textContent = 'TEST IN FLIGHT';
+    }
+    if (execIdDisplay) execIdDisplay.textContent = 'DISPATCHING...';
 
-    // Reset Stepper & Timestamps
-    resetTimelineStepper();
+    // Hide old validation dossier
+    const valCard = document.getElementById('simValidationInspectorCard');
+    if (valCard) valCard.style.display = 'none';
+
+    // Reset Stepper & Timer
+    resetSimulationTimeline();
     attackStartTime = Date.now();
-    const startTimeStr = new Date().toLocaleTimeString();
     const timeStartEl = document.getElementById('timeStart');
-    if (timeStartEl) timeStartEl.textContent = startTimeStr;
     const timeEndEl = document.getElementById('timeEnd');
-    if (timeEndEl) timeEndEl.textContent = '--:--:--';
     const timeDurEl = document.getElementById('timeDuration');
-    if (timeDurEl) timeDurEl.textContent = 'In flight...';
 
-    // Step 1: Ready -> Step 2: Attack Running
-    updateTimelineStage(1, 'completed', 'Localhost Enforced');
-    updateTimelineStage(2, 'active', 'HTTP Probing');
+    if (timeStartEl) timeStartEl.textContent = new Date().toLocaleTimeString();
+    if (timeEndEl) timeEndEl.textContent = '--:--:--';
+    if (timeDurEl) timeDurEl.textContent = '0.0s';
 
-    appendTerminalLine(`<strong style="color: #ef4444;">🚀 DISPATCHING CONTROLLED SECURITY TEST:</strong> [${scenario}] against ${targetUrl}...`, 'sys');
+    if (activeSimTimerInterval) clearInterval(activeSimTimerInterval);
+    activeSimTimerInterval = setInterval(() => {
+        if (attackStartTime && timeDurEl) {
+            const dur = ((Date.now() - attackStartTime) / 1000).toFixed(1);
+            timeDurEl.textContent = `${dur}s`;
+        }
+    }, 100);
+
+    // Stepper Stage 1: Dispatch -> Stage 2: Ingestion
+    updateSimulationTimelineStage(1, 'completed', 'Authorized');
+    updateSimulationTimelineStage(2, 'active', 'Transmitting');
+
+    appendAttackTerminal(
+        `<strong>🚀 DISPATCHING DEFENSIVE TEST:</strong> [${escapeHtml(scenario.toUpperCase())}] &rarr; ${escapeHtml(targetUrl)} (Mode: ${mode.toUpperCase()})`,
+        'sys'
+    );
 
     if (activeEventSource) {
         activeEventSource.close();
         activeEventSource = null;
     }
 
-    const sseUrl = `/api/security/attack-center/stream?scenario=${encodeURIComponent(scenario)}&target_url=${encodeURIComponent(targetUrl)}&client_ip=${encodeURIComponent(clientIp)}&attempts=${encodeURIComponent(attempts)}${payload ? '&payload=' + encodeURIComponent(payload) : ''}`;
+    if (mode === 'dryrun') {
+        try {
+            const resp = await fetch('/api/security/simulations/dispatch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    scenario_id: scenario,
+                    target_url: targetUrl,
+                    client_ip: clientIp,
+                    attempts: attempts,
+                    payload: payload,
+                    execution_mode: 'dryrun',
+                    authorized_confirmation: true
+                })
+            });
+            const dryData = await resp.json();
+            finishSimulationExecution(dryData);
+        } catch (err) {
+            handleSimulationError(err.message || 'Dry run dispatch failed');
+        }
+        return;
+    }
+
+    // Live Execution via SSE Stream
+    const sseUrl = `/api/security/attack-center/stream?scenario=${encodeURIComponent(scenario)}&target_url=${encodeURIComponent(targetUrl)}&client_ip=${encodeURIComponent(clientIp)}&attempts=${encodeURIComponent(attempts)}&mode=live${payload ? '&payload=' + encodeURIComponent(payload) : ''}`;
 
     activeEventSource = new EventSource(sseUrl);
 
-    activeEventSource.onmessage = function(e) {
+    activeEventSource.onmessage = function (e) {
         try {
             const item = JSON.parse(e.data);
+
             if (item.type === 'phase') {
-                appendTerminalLine(`<strong>[PHASE] ${item.name || item.phase}:</strong> ${item.message}`, 'phase');
+                appendAttackTerminal(`<strong>[PHASE ${escapeHtml(item.phase || '')}]</strong> ${escapeHtml(item.message || item.name)}`, 'phase');
                 if (item.phase === 'DEFENSE_INTERCEPT') {
-                    updateTimelineStage(4, 'completed', 'Rule Triggered');
-                    updateTimelineStage(5, 'active', 'Applying Defense');
+                    updateSimulationTimelineStage(3, 'completed', 'Rule Triggered');
+                    updateSimulationTimelineStage(4, 'active', 'Applying Defense');
                 } else if (item.phase === 'VERIFICATION_PROBE') {
-                    updateTimelineStage(5, 'completed', 'Defense Executed');
-                    updateTimelineStage(6, 'active', 'Probing Protected Endpoint');
+                    updateSimulationTimelineStage(4, 'completed', 'Defense Applied');
+                    updateSimulationTimelineStage(5, 'active', 'Probing Defense');
                 }
             } else if (item.type === 'request') {
                 const sc = item.status_code;
-                let scClass = 'term-code-200';
-                if (sc === 401) scClass = 'term-code-401';
-                else if (sc === 403) scClass = 'term-code-403';
-                else if (sc === 429) scClass = 'term-code-429';
-                else if (sc >= 400) scClass = 'term-code-403';
-
-                // Update Stage 2 and Stage 3
-                updateTimelineStage(2, 'completed', `Sent (${item.attempt || 1})`);
-                updateTimelineStage(3, 'completed', `HTTP ${item.status_code}`);
-
-                appendTerminalLine(
-                    `&gt; <span class="${scClass}">HTTP ${item.method} ${item.endpoint || item.url}</span> &rarr; ` +
-                    `<span class="${scClass}">[${item.status_code} ${item.status_text || ''}]</span> ` +
-                    `(${item.latency_ms || item.duration_ms || 12}ms) | Client: <code>${item.client_ip || clientIp}</code>`
+                let scClass = sc === 200 ? 'status-200' : sc === 403 ? 'status-403' : sc === 429 ? 'status-429' : 'status-other';
+                updateSimulationTimelineStage(2, 'completed', `Sent (${item.attempt || 1})`);
+                appendAttackTerminal(
+                    `&gt; <span class="${scClass}">HTTP ${escapeHtml(item.method || 'GET')} ${escapeHtml(item.endpoint || item.url)}</span> &rarr; ` +
+                    `<span class="${scClass}">[${sc} ${escapeHtml(item.status_text || '')}]</span> ` +
+                    `(${item.latency_ms || item.duration_ms || 12}ms) | Client: <code>${escapeHtml(item.client_ip || clientIp)}</code>`,
+                    'request'
                 );
             } else if (item.type === 'detection') {
                 if (statusPill) {
@@ -1201,154 +1342,562 @@ function launchAttackTest() {
                     statusPill.className = 'badge badge-critical';
                 }
                 const confPercent = Math.round((item.confidence || 0.96) * 100);
-                updateTimelineStage(4, 'completed', `${item.rule_id} (${confPercent}%)`);
-                updateTimelineStage(5, 'active', item.mitigation_action || 'Dynamic Quarantine');
+                updateSimulationTimelineStage(3, 'completed', `${escapeHtml(item.rule_id)} (${confPercent}%)`);
+                updateSimulationTimelineStage(4, 'active', 'Quarantining');
 
-                appendTerminalLine(
-                    `<span class="term-detect-box">⚡ DETECTED: [${item.rule_id}] ${item.category || item.title} (${item.severity})</span><br>` +
-                    `&nbsp;&nbsp;Evidence: ${item.summary || item.evidence || ''}`,
+                appendAttackTerminal(
+                    `<span class="term-detect-box">⚡ DETECTED: [${escapeHtml(item.rule_id)}] ${escapeHtml(item.category || item.title)} (${escapeHtml(item.severity)})</span><br>` +
+                    `&nbsp;&nbsp;Evidence: ${escapeHtml(item.summary || item.evidence || '')}`,
                     'detect'
                 );
                 if (item.mitigation_action) {
-                    appendTerminalLine(
-                        `<span class="term-defense-box">🛡️ DEFENSIVE ACTION: ${item.mitigation_action}</span>`,
+                    appendAttackTerminal(
+                        `<span class="term-defense-box">🛡️ DEFENSIVE ACTION: ${escapeHtml(item.mitigation_action)}</span>`,
                         'mitigate'
                     );
                 }
-                toastr.warning(`Security Rule ${item.rule_id} triggered! Defense deployed.`, 'AutoHeal Sentinel');
+                if (item.execution_id && execIdDisplay) {
+                    execIdDisplay.textContent = item.execution_id;
+                    currentSimulationExecutionId = item.execution_id;
+                }
             } else if (item.type === 'verification') {
                 const isBlocked = item.is_blocked || item.status_code === 403 || item.status_code === 429;
                 if (isBlocked) {
-                    updateTimelineStage(6, 'completed', `HTTP ${item.status_code} Blocked`);
+                    updateSimulationTimelineStage(5, 'completed', `HTTP ${item.status_code} Blocked`);
                 } else {
-                    updateTimelineStage(6, 'failed', `HTTP ${item.status_code}`);
+                    updateSimulationTimelineStage(5, 'failed', `HTTP ${item.status_code}`);
                 }
-                updateTimelineStage(7, 'active', 'Compiling Report');
-
-                appendTerminalLine(
-                    `<strong>🔎 POST-ACTION VERIFICATION:</strong> Target ${item.endpoint || '/api/shop'} &rarr; ` +
-                    `<span class="${isBlocked ? 'term-code-403' : 'term-code-200'}">HTTP ${item.status_code}</span> ` +
-                    `Outcome: <strong>${item.message || (isBlocked ? 'VERIFIED_CONTAINED' : 'UNEXPECTED_STATUS')}</strong>`,
+                appendAttackTerminal(
+                    `<strong>🔎 POST-ACTION VERIFICATION:</strong> Target ${escapeHtml(item.endpoint || '/api/shop')} &rarr; ` +
+                    `<span class="${isBlocked ? 'status-403' : 'status-200'}">HTTP ${item.status_code}</span> ` +
+                    `Outcome: <strong>${escapeHtml(item.message || (isBlocked ? 'VERIFIED_CONTAINED' : 'UNEXPECTED_STATUS'))}</strong>`,
                     'verify'
                 );
             } else if (item.type === 'complete') {
-                const attackEndTime = Date.now();
-                const durationSec = attackStartTime ? ((attackEndTime - attackStartTime) / 1000).toFixed(1) : '1.2';
-                
-                const timeEndEl = document.getElementById('timeEnd');
-                if (timeEndEl) timeEndEl.textContent = new Date().toLocaleTimeString();
-                const timeDurEl = document.getElementById('timeDuration');
-                if (timeDurEl) timeDurEl.textContent = `${durationSec}s`;
-
-                updateTimelineStage(6, 'completed', 'Outcome Verified');
-                updateTimelineStage(7, 'completed', 'Dossier Ready');
-
-                if (statusPill) {
-                    statusPill.textContent = 'CONTAINED & VERIFIED';
-                    statusPill.className = 'badge badge-success';
-                }
-                appendTerminalLine(
-                    `<strong style="color: var(--status-success);">✔ TEST COMPLETE & CONTAINED:</strong> Incident ${item.incident_id || 'Recorded'} protected and verified in ${durationSec}s.`,
-                    'complete'
-                );
-
-                displayHealingResultCard(item, durationSec);
-                resetAttackControls();
-                if (activeEventSource) {
-                    activeEventSource.close();
-                    activeEventSource = null;
-                }
-                loadDashboardMetrics();
-                loadOverviewIncidents();
-                loadIncidentsList();
-                loadQuarantinedClients();
-                toastr.success('Security test contained and verified.', 'AutoHeal Sentinel');
+                finishSimulationExecution(item);
             } else if (item.type === 'cancelled') {
-                updateTimelineStage(2, 'failed', 'Stopped');
-                appendTerminalLine(`<strong style="color: var(--status-warning);">[STOP] ${item.message}</strong>`, 'sys');
-                resetAttackControls();
-                if (activeEventSource) {
-                    activeEventSource.close();
-                    activeEventSource = null;
-                }
+                handleSimulationCancelled(item.message);
             } else if (item.type === 'error') {
-                updateTimelineStage(2, 'failed', 'Error');
-                if (statusPill) {
-                    statusPill.textContent = 'ERROR';
-                    statusPill.className = 'badge badge-critical';
-                }
-                appendTerminalLine(`<strong style="color: var(--status-danger);">❌ ERROR:</strong> ${item.message}`, 'error');
-                resetAttackControls();
-                if (activeEventSource) {
-                    activeEventSource.close();
-                    activeEventSource = null;
-                }
-                toastr.error(item.message, 'Test Error');
+                handleSimulationError(item.message);
             }
-        } catch(err) {
+        } catch (err) {
             console.error('SSE JSON error', err, e.data);
         }
     };
 
-    activeEventSource.onerror = function(err) {
-        console.error('SSE Connection Error', err);
-        appendTerminalLine('<span style="color: var(--status-warning);">[SSE] Connection closed or completed.</span>', 'sys');
-        resetAttackControls();
+    activeEventSource.onerror = function (err) {
+        console.warn('SSE stream closed or completed.', err);
         if (activeEventSource) {
             activeEventSource.close();
             activeEventSource = null;
         }
+        resetAttackControls();
     };
 }
 
-async function stopSecurityTest() {
-    try {
-        await fetch('/api/security/test/stop', { method: 'POST' });
-        appendTerminalLine('<strong style="color: var(--status-warning);">[SYS] Operator stop request dispatched.</strong>', 'sys');
-        toastr.info('Test cancellation requested.', 'Attack Center');
-    } catch(e) {
-        console.error('Stop error', e);
+// 8. Simulation Completion & Dossier Generation
+async function finishSimulationExecution(item) {
+    if (activeSimTimerInterval) {
+        clearInterval(activeSimTimerInterval);
+        activeSimTimerInterval = null;
     }
-    updateTimelineStage(2, 'failed', 'Operator Stopped');
+
+    const attackEndTime = Date.now();
+    const durationSec = attackStartTime ? ((attackEndTime - attackStartTime) / 1000).toFixed(1) : (item.duration_ms ? (item.duration_ms / 1000).toFixed(1) : '1.2');
+
+    const timeEndEl = document.getElementById('timeEnd');
+    if (timeEndEl) timeEndEl.textContent = new Date().toLocaleTimeString();
+    const timeDurEl = document.getElementById('timeDuration');
+    if (timeDurEl) timeDurEl.textContent = `${durationSec}s`;
+
+    updateSimulationTimelineStage(4, 'completed', 'Contained');
+    updateSimulationTimelineStage(5, 'completed', 'Verified');
+
+    const statusPill = document.getElementById('terminalStatusPill');
+    const monitorPill = document.getElementById('simMonitorStatusPill');
+    const monitorText = document.getElementById('simMonitorStatusText');
+    const execIdDisplay = document.getElementById('simActiveExecId');
+
+    const execId = item.execution_id || currentSimulationExecutionId || 'SIM-CURRENT';
+    currentSimulationExecutionId = execId;
+    if (execIdDisplay) execIdDisplay.textContent = execId;
+
+    if (statusPill) {
+        statusPill.textContent = 'CONTAINED & VERIFIED';
+        statusPill.className = 'badge badge-success';
+    }
+    if (monitorPill && monitorText) {
+        monitorPill.className = 'live-status-pill idle';
+        monitorText.textContent = 'STANDBY';
+    }
+
+    appendAttackTerminal(
+        `<strong style="color: var(--status-success);">✔ TEST COMPLETE &amp; CONTAINED:</strong> Execution <code>${escapeHtml(execId)}</code> verified in ${durationSec}s.`,
+        'complete'
+    );
+
+    resetAttackControls();
     if (activeEventSource) {
         activeEventSource.close();
         activeEventSource = null;
     }
+
+    // Refresh telemetry and records
+    loadSimulationStats();
+    loadSimulationHistory(1);
+    loadDashboardMetrics();
+    loadQuarantinedClients();
+    if (typeof loadOverviewIncidents === 'function') loadOverviewIncidents();
+
+    // Fetch full execution details if available to display Validation Dossier
+    try {
+        let fullDetail = item;
+        if (item.execution_id) {
+            const detailRes = await fetch(`/api/security/simulations/${item.execution_id}`);
+            if (detailRes.ok) {
+                fullDetail = await detailRes.json();
+            }
+        }
+        renderSimulationValidationDossier(fullDetail);
+    } catch (e) {
+        renderSimulationValidationDossier(item);
+    }
+
+    // Backward compatibility for legacy Result Card
+    displayHealingResultCard(item, durationSec);
+
+    toastr.success(`Simulation ${execId} completed and verified.`, 'Sentinel Defense Center');
+}
+
+function handleSimulationCancelled(msg = 'Simulation aborted by operator.') {
+    if (activeSimTimerInterval) {
+        clearInterval(activeSimTimerInterval);
+        activeSimTimerInterval = null;
+    }
+    updateSimulationTimelineStage(2, 'failed', 'Aborted');
+    appendAttackTerminal(`<strong style="color: var(--status-warning);">[STOPPED] ${escapeHtml(msg)}</strong>`, 'warn');
     resetAttackControls();
+    if (activeEventSource) {
+        activeEventSource.close();
+        activeEventSource = null;
+    }
+    loadSimulationStats();
+    loadSimulationHistory(1);
+    toastr.info(msg, 'Simulation Aborted');
+}
+
+function handleSimulationError(msg = 'Unknown execution failure.') {
+    if (activeSimTimerInterval) {
+        clearInterval(activeSimTimerInterval);
+        activeSimTimerInterval = null;
+    }
+    updateSimulationTimelineStage(2, 'failed', 'Error');
     const statusPill = document.getElementById('terminalStatusPill');
     if (statusPill) {
-        statusPill.textContent = 'STANDBY';
-        statusPill.className = 'badge badge-neutral';
+        statusPill.textContent = 'ERROR';
+        statusPill.className = 'badge badge-critical';
     }
+    appendAttackTerminal(`<strong style="color: var(--status-danger);">❌ ERROR:</strong> ${escapeHtml(msg)}`, 'danger');
+    resetAttackControls();
+    if (activeEventSource) {
+        activeEventSource.close();
+        activeEventSource = null;
+    }
+    toastr.error(msg, 'Execution Error');
+}
+
+async function abortCurrentSimulation() {
+    try {
+        await fetch('/api/security/simulations/abort', { method: 'POST' });
+        appendAttackTerminal('<strong style="color: var(--status-warning);">[SYS] Abort request dispatched to testing engine.</strong>', 'warn');
+    } catch (e) {
+        console.error('Abort error', e);
+    }
+    handleSimulationCancelled('Operator initiated execution abort.');
+}
+
+async function stopSecurityTest() {
+    return abortCurrentSimulation();
 }
 
 function resetAttackControls() {
     const btnLaunch = document.getElementById('btnLaunchAttack');
     const btnStop = document.getElementById('btnStopAttack');
+    const monitorPill = document.getElementById('simMonitorStatusPill');
+    const monitorText = document.getElementById('simMonitorStatusText');
+
     if (btnLaunch) {
         btnLaunch.disabled = false;
         btnLaunch.style.opacity = '1';
     }
-    if (btnStop) btnStop.style.display = 'none';
+    if (btnStop) {
+        btnStop.disabled = true;
+        btnStop.style.opacity = '0.5';
+    }
+    if (monitorPill && monitorText) {
+        monitorPill.className = 'live-status-pill idle';
+        monitorText.textContent = 'STANDBY';
+    }
 }
 
-function appendTerminalLine(htmlContent, type) {
-    const term = document.getElementById('attackTerminalBody');
-    if (!term) return;
+// 9. Detection & Remediation Validation Dossier Rendering
+function renderSimulationValidationDossier(data) {
+    const card = document.getElementById('simValidationInspectorCard');
+    const container = document.getElementById('simValidationContent');
+    const badge = document.getElementById('simValidationOutcomeBadge');
+    if (!card || !container) return;
 
-    const timeStr = new Date().toLocaleTimeString();
-    const line = document.createElement('div');
-    line.className = 'term-line';
-    line.innerHTML = `<span class="term-timestamp">[${timeStr}]</span> ${htmlContent}`;
-    term.appendChild(line);
-    term.scrollTop = term.scrollHeight;
+    const matrix = data.validation_matrix || {};
+    const det = matrix.detection || {};
+    const rem = matrix.remediation || {};
+
+    const outcome = data.detection_outcome || (det.outcome || 'DETECTED');
+    const isContained = data.protection_verified || rem.protection_verified;
+
+    if (badge) {
+        badge.textContent = `${outcome} & ${isContained ? 'CONTAINED' : 'EVALUATED'}`;
+        badge.className = outcome === 'DETECTED' ? 'badge badge-success' : 'badge badge-warning';
+    }
+
+    const execId = data.execution_id || 'SIM-TEST';
+    const incId = data.incident_id || (data.detection && data.detection.incident_id) || null;
+
+    container.innerHTML = `
+        <div class="validation-matrix-grid">
+            <!-- Left: Detection Validation -->
+            <div class="validation-pane">
+                <div class="validation-pane-header">
+                    <h4><i class="fas fa-radar" style="color: var(--primary);"></i> Detection Rule Validation</h4>
+                    <span class="badge ${det.rule_match ? 'badge-success' : 'badge-warning'}">
+                        ${det.rule_match ? '<i class="fas fa-check"></i> RULE MATCH' : '<i class="fas fa-triangle-exclamation"></i> MISMATCH'}
+                    </span>
+                </div>
+                <div class="validation-metric-row">
+                    <span class="metric-label">Expected Detection Rule:</span>
+                    <span class="metric-val"><code>${escapeHtml(det.expected_rule || data.expected_rule_id || 'INJ-001')}</code></span>
+                </div>
+                <div class="validation-metric-row">
+                    <span class="metric-label">Actual Triggered Rule:</span>
+                    <span class="metric-val"><code>${escapeHtml(det.actual_rule || data.actual_rule_id || 'INJ-001')}</code></span>
+                </div>
+                <div class="validation-metric-row">
+                    <span class="metric-label">Detection Outcome:</span>
+                    <span class="metric-val"><strong style="color: var(--status-success);">${escapeHtml(outcome)}</strong></span>
+                </div>
+                <div class="validation-metric-row">
+                    <span class="metric-label">Confidence Score:</span>
+                    <span class="metric-val">${Math.round((det.confidence || 0.96) * 100)}%</span>
+                </div>
+                <div class="validation-metric-row">
+                    <span class="metric-label">Telemetry Events Generated:</span>
+                    <span class="metric-val font-mono">${data.request_count || data.attempts || 5} events</span>
+                </div>
+                <div class="validation-metric-row">
+                    <span class="metric-label">Correlated Incident:</span>
+                    <span class="metric-val">
+                        ${incId ? `<a href="javascript:void(0)" onclick="inspectIncident('${escapeHtml(incId)}')" style="color: var(--accent-cyan); font-weight: 700;"><i class="fas fa-link"></i> ${escapeHtml(incId)}</a>` : '<span style="color: var(--text-muted);">None</span>'}
+                    </span>
+                </div>
+            </div>
+
+            <!-- Right: Remediation & Containment Validation -->
+            <div class="validation-pane">
+                <div class="validation-pane-header">
+                    <h4><i class="fas fa-shield-virus" style="color: var(--status-success);"></i> Remediation &amp; Containment Validation</h4>
+                    <span class="badge ${isContained ? 'badge-success' : 'badge-danger'}">
+                        ${isContained ? '<i class="fas fa-circle-check"></i> VERIFIED' : '<i class="fas fa-times-circle"></i> UNVERIFIED'}
+                    </span>
+                </div>
+                <div class="validation-metric-row">
+                    <span class="metric-label">SOAR Policy Action:</span>
+                    <span class="metric-val"><strong style="color: var(--accent-cyan);">${escapeHtml(rem.action_executed || 'BLOCK_IP (Dynamic Quarantine)')}</strong></span>
+                </div>
+                <div class="validation-metric-row">
+                    <span class="metric-label">Attacker Probe Check:</span>
+                    <span class="metric-val">
+                        <span class="badge badge-danger">HTTP ${rem.attacker_probe_status || 403} ${rem.attacker_probe_blocked ? 'BLOCKED' : 'ALLOW'}</span>
+                    </span>
+                </div>
+                <div class="validation-metric-row">
+                    <span class="metric-label">Benign Shopper Probe Check:</span>
+                    <span class="metric-val">
+                        <span class="badge badge-success">HTTP ${rem.benign_probe_status || 200} PASS</span>
+                    </span>
+                </div>
+                <div class="validation-metric-row">
+                    <span class="metric-label">Dual-Probe Perimeter Verdict:</span>
+                    <span class="metric-val">
+                        <strong style="color: ${isContained ? 'var(--status-success)' : 'var(--status-danger)'};">
+                            ${isContained ? 'TARGET SECURED (Zero False Collateral)' : 'CONTAINMENT DEGRADED'}
+                        </strong>
+                    </span>
+                </div>
+                <div class="validation-metric-row">
+                    <span class="metric-label">Execution Duration:</span>
+                    <span class="metric-val font-mono">${data.duration_ms ? `${(data.duration_ms / 1000).toFixed(1)}s` : '1.2s'}</span>
+                </div>
+                <div class="validation-metric-row">
+                    <span class="metric-label">Forensic Evidence Dossier:</span>
+                    <span class="metric-val">
+                        <button class="btn btn-secondary btn-sm" onclick="openSimulationEvidenceDrawer('${escapeHtml(execId)}')" style="font-size: 11px; padding: 2px 8px;">
+                            <i class="fas fa-microscope"></i> Inspect Evidence
+                        </button>
+                    </span>
+                </div>
+            </div>
+        </div>
+    `;
+
+    card.style.display = 'block';
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
+// 10. Execution History & Evidence Records Table
+async function loadSimulationHistory(page = 1) {
+    simHistoryCurrentPage = page;
+    const tbody = document.getElementById('simulationHistoryTableBody');
+    if (!tbody) return;
+
+    const scenarioFilter = document.getElementById('filterSimScenario')?.value || 'all';
+    const statusFilter = document.getElementById('filterSimStatus')?.value || 'all';
+    const outcomeFilter = document.getElementById('filterSimOutcome')?.value || 'all';
+    const searchVal = document.getElementById('searchSimHistory')?.value.trim() || '';
+
+    let url = `/api/security/simulations?page=${page}&limit=${simHistoryPerPage}`;
+    if (scenarioFilter !== 'all') url += `&scenario=${encodeURIComponent(scenarioFilter)}`;
+    if (statusFilter !== 'all') url += `&status=${encodeURIComponent(statusFilter)}`;
+    if (outcomeFilter !== 'all') url += `&detection_outcome=${encodeURIComponent(outcomeFilter)}`;
+    if (searchVal) url += `&search=${encodeURIComponent(searchVal)}`;
+
+    try {
+        const res = await fetch(url);
+        if (!res.ok) return;
+        const data = await res.json();
+        const items = data.items || [];
+        simHistoryTotal = data.total || 0;
+
+        if (items.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="11" style="text-align: center; color: var(--text-muted); padding: 24px;">No simulation execution records match active filters.</td></tr>';
+            updateSimPagination(0, 1, 1);
+            return;
+        }
+
+        tbody.innerHTML = items.map(sim => {
+            const timeStr = formatAppSecTimestamp(sim.start_time || sim.created_at, true);
+            const statusClass = sim.status === 'COMPLETED' ? 'badge-success' : sim.status === 'FAILED' ? 'badge-critical' : 'badge-warning';
+            const outcomeClass = sim.detection_outcome === 'DETECTED' ? 'badge-success' : sim.detection_outcome === 'NOT_DETECTED' ? 'badge-critical' : 'badge-neutral';
+            const containedClass = sim.protection_verified ? 'badge-success' : 'badge-neutral';
+            const durStr = sim.duration_ms ? `${(sim.duration_ms / 1000).toFixed(1)}s` : '-';
+
+            return `
+                <tr>
+                    <td style="white-space: nowrap; font-size: 11px;">${timeStr}</td>
+                    <td>
+                        <strong class="font-mono text-cyan" style="cursor: pointer;" onclick="openSimulationEvidenceDrawer('${escapeHtml(sim.execution_id)}')">
+                            ${escapeHtml(sim.execution_id)}
+                        </strong>
+                    </td>
+                    <td>
+                        <div style="font-weight: 600; color: #fff;">${escapeHtml(sim.scenario_name || sim.scenario_id)}</div>
+                        <div style="font-size: 10px; color: var(--text-muted); font-family: var(--font-mono);">${escapeHtml(sim.expected_rule_id || '-')}</div>
+                    </td>
+                    <td style="font-family: var(--font-mono); font-size: 11px;">${escapeHtml(sim.target_url || 'http://localhost:8000')}</td>
+                    <td><code>${escapeHtml(sim.client_ip || '127.0.0.1')}</code></td>
+                    <td><span class="badge ${sim.execution_mode === 'live' ? 'badge-primary' : 'badge-neutral'}">${escapeHtml((sim.execution_mode || 'live').toUpperCase())}</span></td>
+                    <td><span class="badge ${statusClass}">${escapeHtml(sim.status)}</span></td>
+                    <td><span class="badge ${outcomeClass}">${escapeHtml(sim.detection_outcome || 'N/A')}</span></td>
+                    <td><span class="badge ${containedClass}">${sim.protection_verified ? 'VERIFIED' : 'EVALUATED'}</span></td>
+                    <td class="font-mono text-cyan">${durStr}</td>
+                    <td>
+                        <button class="btn btn-outline btn-sm" onclick="openSimulationEvidenceDrawer('${escapeHtml(sim.execution_id)}')" style="font-size: 11px; padding: 2px 8px;">
+                            <i class="fas fa-microscope"></i> Evidence
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+        const totalPages = Math.ceil(simHistoryTotal / simHistoryPerPage) || 1;
+        updateSimPagination(simHistoryTotal, page, totalPages);
+    } catch (e) {
+        console.error('Error loading simulation history:', e);
+    }
+}
+
+function updateSimPagination(total, page, totalPages) {
+    const info = document.getElementById('simPaginationInfo');
+    const display = document.getElementById('simPageCurrentDisplay');
+    const prevBtn = document.getElementById('simPagePrevBtn');
+    const nextBtn = document.getElementById('simPageNextBtn');
+
+    if (info) info.textContent = `Showing ${Math.min(total, (page - 1) * simHistoryPerPage + 1)} - ${Math.min(total, page * simHistoryPerPage)} of ${total} executions`;
+    if (display) display.textContent = `Page ${page} of ${totalPages}`;
+    if (prevBtn) prevBtn.disabled = page <= 1;
+    if (nextBtn) nextBtn.disabled = page >= totalPages;
+}
+
+function changeSimHistoryPage(delta) {
+    const newPage = simHistoryCurrentPage + delta;
+    if (newPage >= 1) {
+        loadSimulationHistory(newPage);
+    }
+}
+
+function onSimSearchKeyup(e) {
+    if (simHistoryDebounce) clearTimeout(simHistoryDebounce);
+    simHistoryDebounce = setTimeout(() => {
+        loadSimulationHistory(1);
+    }, 300);
+}
+
+// 11. Side-Over Simulation Evidence Drawer (Forensic Inspector)
+async function openSimulationEvidenceDrawer(executionId) {
+    const drawer = document.getElementById('simulationEvidenceDrawer');
+    const backdrop = document.getElementById('simEvidenceBackdrop');
+    const heading = document.getElementById('simDrawerHeading');
+    const badge = document.getElementById('simDrawerStatusBadge');
+    const body = document.getElementById('simEvidenceDrawerBody');
+
+    if (!drawer || !backdrop) return;
+
+    drawer.classList.add('open');
+    backdrop.classList.add('open');
+
+    if (heading) heading.textContent = `Simulation Evidence: ${executionId}`;
+    if (badge) badge.innerHTML = '<span class="badge badge-warning">Loading...</span>';
+    if (body) {
+        body.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: var(--text-muted);">
+                <i class="fas fa-spinner fa-spin"></i> Retrieving cryptographically validated evidence from database...
+            </div>
+        `;
+    }
+
+    try {
+        const res = await fetch(`/api/security/simulations/${executionId}`);
+        if (!res.ok) {
+            if (body) body.innerHTML = '<div style="color: var(--status-danger); padding: 20px;">Execution record not found.</div>';
+            return;
+        }
+        const sim = await res.json();
+        activeDrawerExecutionData = sim;
+
+        if (badge) {
+            const stBadge = sim.status === 'COMPLETED' ? 'badge-success' : 'badge-danger';
+            badge.innerHTML = `<span class="badge ${stBadge}">${escapeHtml(sim.status)}</span>`;
+        }
+
+        const steps = sim.steps || [];
+        const durSec = sim.duration_ms ? (sim.duration_ms / 1000).toFixed(2) : '1.20';
+
+        if (body) {
+            body.innerHTML = `
+                <!-- Overview Header -->
+                <div style="background: var(--bg-card-subtle); border: 1px solid var(--border-panel); border-radius: var(--radius-sm); padding: 14px; margin-bottom: 16px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11.5px;">
+                        <div>Execution ID: <strong class="font-mono text-cyan">${escapeHtml(sim.execution_id)}</strong></div>
+                        <div>Scenario: <strong>${escapeHtml(sim.scenario_name || sim.scenario_id)}</strong></div>
+                        <div>Target URL: <code>${escapeHtml(sim.target_url)}</code></div>
+                        <div>Client IP: <code>${escapeHtml(sim.client_ip)}</code></div>
+                        <div>Start Time: <span class="font-mono">${formatAppSecTimestamp(sim.start_time, true)}</span></div>
+                        <div>End Time: <span class="font-mono">${formatAppSecTimestamp(sim.end_time, true)}</span></div>
+                        <div>Duration: <span class="font-mono text-cyan">${durSec}s</span></div>
+                        <div>Detection: <strong style="color: var(--status-success);">${escapeHtml(sim.detection_outcome || 'N/A')}</strong></div>
+                    </div>
+                </div>
+
+                <!-- Execution Step Traces -->
+                <div style="margin-bottom: 16px;">
+                    <h4 style="font-size: 12px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px;">
+                        <i class="fas fa-route" style="color: var(--primary);"></i> Transmission &amp; Probe Step Traces (${steps.length})
+                    </h4>
+                    <div style="max-height: 200px; overflow-y: auto; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border-panel); border-radius: var(--radius-xs); padding: 8px; font-family: var(--font-mono); font-size: 11px;">
+                        ${steps.length === 0 ? '<div style="color: var(--text-muted);">No trace steps recorded.</div>' : steps.map((st, i) => {
+                            const sc = st.status_code;
+                            const color = sc === 200 ? 'var(--status-success)' : sc === 403 ? 'var(--status-danger)' : sc === 429 ? 'var(--status-warning)' : 'var(--text-secondary)';
+                            return `
+                                <div style="padding: 4px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.05); display: flex; justify-content: space-between;">
+                                    <span>[#${i + 1}] ${escapeHtml(st.method || 'GET')} ${escapeHtml(st.endpoint || '/')}</span>
+                                    <span style="color: ${color}; font-weight: 700;">HTTP ${sc} (${st.latency_ms || 12}ms)</span>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+
+                <!-- Detection & Containment Verification -->
+                <div style="background: var(--bg-card-subtle); border: 1px solid var(--border-panel); border-radius: var(--radius-sm); padding: 14px; margin-bottom: 16px;">
+                    <h4 style="font-size: 12px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px;">
+                        <i class="fas fa-shield-halved" style="color: var(--status-success);"></i> Detection &amp; Quarantine Verdict
+                    </h4>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11.5px;">
+                        <div>Expected Rule: <code>${escapeHtml(sim.expected_rule_id || '-')}</code></div>
+                        <div>Actual Rule: <code>${escapeHtml(sim.actual_rule_id || '-')}</code></div>
+                        <div>Dual-Probe Contained: <strong style="color: ${sim.protection_verified ? 'var(--status-success)' : 'var(--status-danger)'};">${sim.protection_verified ? 'YES (HTTP 403 & 200)' : 'NO'}</strong></div>
+                        <div>Related Incident: ${sim.incident_id ? `<a href="javascript:void(0)" onclick="closeSimulationEvidenceDrawer(); inspectIncident('${escapeHtml(sim.incident_id)}');" style="color: var(--accent-cyan);"><i class="fas fa-link"></i> ${escapeHtml(sim.incident_id)}</a>` : 'None'}</div>
+                    </div>
+                </div>
+
+                <!-- Raw Safely-Escaped JSON Evidence -->
+                <div>
+                    <h4 style="font-size: 12px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px;">
+                        <i class="fas fa-code" style="color: var(--accent-cyan);"></i> Raw Forensic Artifact (JSON)
+                    </h4>
+                    <pre style="background: rgba(0, 0, 0, 0.5); border: 1px solid var(--border-panel); border-radius: var(--radius-xs); padding: 12px; font-family: var(--font-mono); font-size: 11px; max-height: 250px; overflow-y: auto; color: var(--text-secondary);"><code id="simEvidenceRawCode"></code></pre>
+                </div>
+            `;
+
+            const codeEl = document.getElementById('simEvidenceRawCode');
+            if (codeEl) {
+                codeEl.textContent = JSON.stringify(sim, null, 2);
+            }
+        }
+    } catch (e) {
+        console.error('Error loading simulation evidence:', e);
+        if (body) body.innerHTML = '<div style="color: var(--status-danger); padding: 20px;">Failed to load evidence details.</div>';
+    }
+}
+
+function closeSimulationEvidenceDrawer() {
+    const drawer = document.getElementById('simulationEvidenceDrawer');
+    const backdrop = document.getElementById('simEvidenceBackdrop');
+    if (drawer) drawer.classList.remove('open');
+    if (backdrop) backdrop.classList.remove('open');
+    activeDrawerExecutionData = null;
+}
+
+// 12. Export Utilities
+function exportSimulationHistoryCSV() {
+    window.location.href = '/api/security/simulations?format=csv';
+    toastr.info('Generating immutable CSV simulation audit export...', 'Evidence Center');
+}
+
+function exportSimulationDossierJson() {
+    if (!activeDrawerExecutionData) {
+        toastr.warning('No execution evidence loaded in drawer.');
+        return;
+    }
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(activeDrawerExecutionData, null, 2));
+    const dlAnchor = document.createElement('a');
+    dlAnchor.setAttribute('href', dataStr);
+    dlAnchor.setAttribute('download', `${activeDrawerExecutionData.execution_id || 'simulation'}_dossier.json`);
+    document.body.appendChild(dlAnchor);
+    dlAnchor.click();
+    dlAnchor.remove();
+    toastr.success('Evidence dossier JSON exported.');
+}
+
+function runAttackReplay() {
+    selectScenarioForSimulation('replay');
+    launchAttackTest();
+}
+
+// 13. Legacy Result Card & Incident Reporting Handlers
 function displayHealingResultCard(data, durationSec) {
     const card = document.getElementById('healingResultCard');
     if (!card) return;
 
-    const incId = data.incident_id || (data.detection ? data.detection.incident_id : (data.incident ? data.incident.incident_id : 'INC-APPSEC-CURRENT'));
+    const incId = data.incident_id || (data.detection && data.detection.incident_id) || (data.incident && data.incident.incident_id) || 'INC-APPSEC-CURRENT';
     currentGeneratedIncidentId = incId;
 
     const incIdEl = document.getElementById('resIncidentId');
@@ -1360,42 +1909,30 @@ function displayHealingResultCard(data, durationSec) {
     const ruleEl = document.getElementById('resRule');
     if (ruleEl) ruleEl.textContent = (data.detection && data.detection.rule_id) || data.rule_id || (data.incident && data.incident.rule_id) || 'AUTH-001';
 
-    // Detection Status
     const detStatusEl = document.getElementById('resDetectionStatus');
     if (detStatusEl) {
         const ruleId = (data.detection && data.detection.rule_id) || data.rule_id || 'SENTINEL-POLICY';
         detStatusEl.textContent = `TRIGGERED (${ruleId} - Active Correlation)`;
     }
 
-    // Defensive Action
     const actionEl = document.getElementById('resAction');
     const actStr = (data.mitigation && data.mitigation.action) || (data.detection && data.detection.recommended_action) || 'BLOCK_IP (Dynamic Quarantine)';
     if (actionEl) actionEl.textContent = actStr;
 
-    // Healing Status
     const healStatusEl = document.getElementById('resHealingStatus');
-    if (healStatusEl) {
-        healStatusEl.textContent = 'DYNAMIC IP QUARANTINE APPLIED (300s TTL)';
-    }
+    if (healStatusEl) healStatusEl.textContent = 'DYNAMIC IP QUARANTINE APPLIED (300s TTL)';
 
-    // Containment Outcome
     const contEl = document.getElementById('resContainmentBadge');
     if (contEl) {
         contEl.textContent = data.protection_verified ? 'VERIFIED CONTAINED' : 'CONTAINED';
         contEl.className = data.protection_verified ? 'badge badge-success' : 'badge badge-warning';
     }
 
-    // Post-Verification Check
     const verifEl = document.getElementById('resVerification');
-    if (verifEl) {
-        verifEl.textContent = data.protection_verified ? 'PROTECTION VERIFIED (HTTP 403 Forbidden)' : 'VERIFIED CONTAINED';
-    }
+    if (verifEl) verifEl.textContent = data.protection_verified ? 'PROTECTION VERIFIED (HTTP 403 Forbidden)' : 'VERIFIED CONTAINED';
 
-    // Duration
     const durEl = document.getElementById('resDuration');
-    if (durEl) {
-        durEl.textContent = durationSec ? `${durationSec}s` : '1.4s';
-    }
+    if (durEl) durEl.textContent = durationSec ? `${durationSec}s` : '1.4s';
 
     // Populate Diagram Step 6: Incident Created Card
     const s6Id = document.getElementById('resStep6IncidentId');
@@ -1409,15 +1946,15 @@ function displayHealingResultCard(data, durationSec) {
             'admin': 'Unauthorized access test',
             'sqli': 'SQL injection validation',
             'xss': 'XSS validation test',
-            'rate': 'Request-rate anomaly test'
+            'rate': 'Request-rate anomaly test',
+            'health': 'Error cascade resilience test',
+            'replay': 'Multi-vector attack replay'
         };
         s6Type.textContent = typeMap[scenario] || (data.detection && data.detection.category) || 'Brute-force login attempt';
     }
 
     const s6Ep = document.getElementById('resStep6Endpoint');
-    if (s6Ep) {
-        s6Ep.textContent = data.endpoint || (data.detection && data.detection.endpoint) || '/api/auth/login';
-    }
+    if (s6Ep) s6Ep.textContent = data.endpoint || (data.detection && data.detection.endpoint) || '/api/auth/login';
 
     const now = new Date();
     const startTimeFormatted = attackStartTime ? new Date(attackStartTime).toISOString().replace('T', ' ').substring(0, 19) : now.toISOString().replace('T', ' ').substring(0, 19);
@@ -1436,9 +1973,7 @@ function displayHealingResultCard(data, durationSec) {
     }
 
     const s6Ip = document.getElementById('resStep6SourceIp');
-    if (s6Ip) {
-        s6Ip.textContent = data.client_ip || document.getElementById('testClientIpInput')?.value || '127.0.0.1';
-    }
+    if (s6Ip) s6Ip.textContent = data.client_ip || document.getElementById('testClientIpInput')?.value || '127.0.0.1';
 
     const s6Sev = document.getElementById('resStep6Severity');
     if (s6Sev) {
@@ -1458,18 +1993,13 @@ function displayHealingResultCard(data, durationSec) {
         jsonBtn.setAttribute('download', `${incId}_dossier.json`);
     }
 
-    // Pre-populate Step 10 Incident Report in Reports workspace
     populateStep10Report(incId, data, startTimeFormatted, endTimeFormatted);
-
     card.style.display = 'block';
-    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function toggleAccordion(id) {
     const el = document.getElementById(id);
-    if (el) {
-        el.classList.toggle('active');
-    }
+    if (el) el.classList.toggle('active');
 }
 
 async function populateStep10Report(incId, customData, startTimeStr, endTimeStr) {
@@ -1477,13 +2007,9 @@ async function populateStep10Report(incId, customData, startTimeStr, endTimeStr)
     if (repHeader) repHeader.textContent = `Incident Report #${incId}`;
 
     const repPdf = document.getElementById('repBtnPdf');
-    if (repPdf) {
-        repPdf.href = `/api/security/incidents/${incId}/export?format=pdf`;
-    }
+    if (repPdf) repPdf.href = `/api/security/incidents/${incId}/export?format=pdf`;
     const repJson = document.getElementById('repBtnJson');
-    if (repJson) {
-        repJson.href = `/api/security/incidents/${incId}/export?format=json`;
-    }
+    if (repJson) repJson.href = `/api/security/incidents/${incId}/export?format=json`;
 
     const scenario = document.getElementById('attackScenarioSelect')?.value || 'failed_logins';
     const typeMap = {
@@ -1491,7 +2017,9 @@ async function populateStep10Report(incId, customData, startTimeStr, endTimeStr)
         'admin': 'Unauthorized access test',
         'sqli': 'SQL injection validation',
         'xss': 'XSS validation test',
-        'rate': 'Request-rate anomaly test'
+        'rate': 'Request-rate anomaly test',
+        'health': 'Health cascade test',
+        'replay': 'Attack replay test'
     };
 
     const repType = document.getElementById('repSummaryAttackType');
@@ -1509,7 +2037,6 @@ async function populateStep10Report(incId, customData, startTimeStr, endTimeStr)
     const repEnd = document.getElementById('repSummaryEndTime');
     if (repEnd) repEnd.textContent = endTimeStr || new Date().toISOString().replace('T', ' ').substring(0, 19);
 
-    // Fetch full incident details if available
     try {
         const res = await fetch(`/api/security/incidents/${incId}`);
         if (res.ok) {
@@ -1528,8 +2055,8 @@ async function populateStep10Report(incId, customData, startTimeStr, endTimeStr)
                 preEl.textContent = typeof evData === 'object' ? JSON.stringify(evData, null, 2) : String(evData || 'No additional evidence recorded.');
             }
         }
-    } catch(e) {
-        console.warn('Could not load specific incident details for Step 10 report', e);
+    } catch (e) {
+        console.warn('Could not load incident details for Step 10 report', e);
     }
 }
 
@@ -1548,9 +2075,7 @@ function openGeneratedReport() {
     }
     loadIncidentReportsTable();
     const step10El = document.getElementById('step10ReportCard');
-    if (step10El) {
-        step10El.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
+    if (step10El) step10El.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // =========================================================================

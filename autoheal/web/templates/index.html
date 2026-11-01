@@ -1018,130 +1018,343 @@
                 </section>
 
                 <!-- ===================================================================
-                     MODULE 3: ATTACK SIMULATION CENTER
+                     MODULE 3: ATTACK SIMULATION CENTER (PHASE 4)
                      =================================================================== -->
                 <section id="pageAttackCenter" class="workspace-page">
-                    <div class="page-header-ribbon">
+                    <!-- 1. Header Ribbon -->
+                    <div class="page-header-ribbon tc-header-ribbon">
                         <div>
-                            <h2><i class="fas fa-crosshairs" style="color: var(--primary);"></i> Attack Simulation Center</h2>
-                            <p>Dispatch authorized adversarial test scenarios to benchmark real-time detection, SOAR quarantine, and AST healing</p>
+                            <h2><i class="fas fa-crosshairs" style="color: var(--status-danger);"></i> Attack Simulation Center</h2>
+                            <p>Authorized Defensive Security Testing, Real-Time Detection Benchmarking &amp; Autonomous Containment Verification</p>
                         </div>
-                        <div style="display: flex; gap: 10px;">
+                        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                            <span class="live-status-pill idle" id="simMonitorStatusPill">
+                                <span class="indicator-dot"></span> <span id="simMonitorStatusText">STANDBY</span>
+                            </span>
                             <button class="btn btn-secondary" onclick="runAttackReplay()">
                                 <i class="fas fa-redo"></i> Replay Attack Test
+                            </button>
+                            <button class="btn btn-secondary" onclick="exportSimulationHistoryCSV()">
+                                <i class="fas fa-file-csv"></i> Export CSV
+                            </button>
+                            <button class="btn btn-secondary" onclick="loadSimulationDashboard(true)">
+                                <i class="fas fa-arrows-rotate"></i> Refresh
                             </button>
                         </div>
                     </div>
 
-                    <div class="attack-center-grid">
-                        <!-- Configuration Panel -->
-                        <div class="soc-card">
+                    <!-- 2. Simulation KPI Metric Cards -->
+                    <div class="tc-kpi-bar" style="grid-template-columns: repeat(6, 1fr); margin-bottom: 20px;">
+                        <div class="tc-kpi-card">
+                            <div class="tc-kpi-header">
+                                <span class="tc-kpi-title">Total Simulations</span>
+                                <i class="fas fa-crosshairs tc-kpi-icon" style="color: var(--primary);"></i>
+                            </div>
+                            <div class="tc-kpi-val" id="statSimTotal">--</div>
+                            <div class="tc-kpi-delta neutral">Persisted executions</div>
+                        </div>
+                        <div class="tc-kpi-card">
+                            <div class="tc-kpi-header">
+                                <span class="tc-kpi-title">Available Scenarios</span>
+                                <i class="fas fa-book tc-kpi-icon" style="color: var(--accent-cyan);"></i>
+                            </div>
+                            <div class="tc-kpi-val" id="statSimScenarios">7</div>
+                            <div class="tc-kpi-delta neutral">Verified executable</div>
+                        </div>
+                        <div class="tc-kpi-card">
+                            <div class="tc-kpi-header">
+                                <span class="tc-kpi-title">Successful Detections</span>
+                                <i class="fas fa-shield-halved tc-kpi-icon" style="color: var(--status-success);"></i>
+                            </div>
+                            <div class="tc-kpi-val" id="statSimDetected" style="color: var(--status-success);">--</div>
+                            <div class="tc-kpi-delta positive">Rule match confirmed</div>
+                        </div>
+                        <div class="tc-kpi-card">
+                            <div class="tc-kpi-header">
+                                <span class="tc-kpi-title">Detection Rate</span>
+                                <i class="fas fa-bullseye tc-kpi-icon" style="color: var(--accent-cyan);"></i>
+                            </div>
+                            <div class="tc-kpi-val" id="statSimRate">--%</div>
+                            <div class="tc-kpi-delta positive">True positive ratio</div>
+                        </div>
+                        <div class="tc-kpi-card">
+                            <div class="tc-kpi-header">
+                                <span class="tc-kpi-title">Verified Protections</span>
+                                <i class="fas fa-circle-check tc-kpi-icon" style="color: var(--status-success);"></i>
+                            </div>
+                            <div class="tc-kpi-val" id="statSimVerified">--</div>
+                            <div class="tc-kpi-delta positive">Dual-probe validated</div>
+                        </div>
+                        <div class="tc-kpi-card">
+                            <div class="tc-kpi-header">
+                                <span class="tc-kpi-title">Incidents Created</span>
+                                <i class="fas fa-triangle-exclamation tc-kpi-icon" style="color: var(--status-warning);"></i>
+                            </div>
+                            <div class="tc-kpi-val" id="statSimIncidents" style="color: var(--status-warning);">--</div>
+                            <div class="tc-kpi-delta neutral">Auto-escalated to SOC</div>
+                        </div>
+                    </div>
+
+                    <!-- 3. Scenario Library Section -->
+                    <div style="margin-bottom: 24px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <div>
+                                <h3 style="margin: 0; font-size: 1rem; color: var(--text-primary);"><i class="fas fa-layer-group" style="color: var(--primary);"></i> Authorized Defensive Scenario Library</h3>
+                                <p style="margin: 2px 0 0 0; font-size: 0.8rem; color: var(--text-muted);">Select a non-destructive defensive scenario to calibrate detection rules, benchmark latency, and inspect SOAR responses.</p>
+                            </div>
+                        </div>
+                        <div class="scenario-catalog-grid" id="simulationScenarioCatalogGrid">
+                            <!-- Populated dynamically via loadSimulationCatalog() -->
+                        </div>
+                    </div>
+
+                    <!-- 4. Execution & Live Telemetry Grid -->
+                    <div class="attack-center-grid" style="margin-bottom: 24px;">
+                        <!-- Left: Execution Configuration Panel -->
+                        <div class="soc-card" id="simulationConfigCard">
                             <div class="soc-card-header">
                                 <h3><i class="fas fa-sliders" style="color: var(--primary);"></i> Scenario Dispatch Configuration</h3>
-                                <span class="badge badge-neutral">Isolated Target</span>
+                                <span class="target-safety-pill">
+                                    <i class="fas fa-lock"></i> Localhost Allowlist Enforced
+                                </span>
                             </div>
                             <div class="soc-card-body">
                                 <div class="form-group">
-                                    <label>Adversarial Test Scenario</label>
-                                    <select class="soc-select" id="attackScenarioSelect">
-                                        <option value="sqli_auth_bypass">1. SQL Injection Authentication Bypass (CWE-89)</option>
-                                        <option value="stored_xss_product">2. Stored Cross-Site Scripting (CWE-79)</option>
-                                        <option value="credential_stuffing">3. Credential Stuffing &amp; Brute-Force (T1110)</option>
-                                        <option value="dos_checkout_flood">4. DoS HTTP Flood on Checkout (T1499)</option>
-                                        <option value="admin_path_probe">5. Privileged Admin Endpoint Probing (T1078)</option>
-                                        <option value="order_manipulation">6. E-Commerce Price Tampering Flaw (CWE-840)</option>
+                                    <label for="attackScenarioSelect">Adversarial Test Scenario</label>
+                                    <select class="soc-select" id="attackScenarioSelect" onchange="onScenarioSelectChange()">
+                                        <option value="sqli">1. SQL Injection Attack Vector (INJ-001 / CWE-89)</option>
+                                        <option value="xss">2. Cross-Site Scripting Neutralization (XSS-001 / CWE-79)</option>
+                                        <option value="failed_logins">3. Credential Stuffing &amp; Brute-Force Abuse (AUTH-001 / T1110)</option>
+                                        <option value="admin">4. Unauthorized Administrative Access (AUTH-002 / T1078)</option>
+                                        <option value="rate">5. API Endpoint Flooding &amp; DoS Burst (RATE-001 / T1499)</option>
+                                        <option value="health">6. Application Health &amp; Error Cascade Resilience (HEALTH-001)</option>
+                                        <option value="replay">7. Multi-Vector Attack Replay &amp; Baseline Comparison (CORR-001)</option>
                                     </select>
-                                    <div class="form-helper" id="scenarioDescriptionText">Executes boolean-based SQL injection payloads against /api/auth/login.</div>
+                                    <div class="form-helper" id="scenarioDescriptionText">Sends safe boolean-based SQL injection probes against /api/shop/products?q= to validate perimeter drop.</div>
                                 </div>
 
                                 <div class="form-group">
-                                    <label>Execution Intensity (Concurrent Probes)</label>
-                                    <input type="range" min="1" max="5" value="3" class="soc-input" id="attackIntensitySlider" oninput="document.getElementById('intensityVal').textContent = this.value">
-                                    <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); margin-top: 4px;">
-                                        <span>Single Probe (1)</span>
-                                        <span>Intensity: <strong style="color: var(--accent-cyan);" id="intensityVal">3</strong></span>
-                                        <span>Sustained Storm (5)</span>
+                                    <label for="testTargetUrlInput">Target Environment Base URL</label>
+                                    <input type="text" class="soc-input" id="testTargetUrlInput" value="http://localhost:8000" readonly style="background: rgba(255, 255, 255, 0.03); cursor: not-allowed;">
+                                    <div class="form-helper">Safety boundary: Non-localhost targets are strictly prohibited and dropped by kernel safety guardrails.</div>
+                                </div>
+
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                                    <div class="form-group">
+                                        <label for="testClientIpInput">Simulated Client IP</label>
+                                        <input type="text" class="soc-input" id="testClientIpInput" value="203.0.113.88" placeholder="e.g. 203.0.113.88">
                                     </div>
+                                    <div class="form-group">
+                                        <label for="testAttemptsInput">Probes / Attempts</label>
+                                        <input type="number" class="soc-input" id="testAttemptsInput" value="5" min="1" max="50">
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="testPayloadInput">Custom Test Payload (Optional)</label>
+                                    <input type="text" class="soc-input" id="testPayloadInput" placeholder="Leave blank to use verified safe default payload">
                                 </div>
 
                                 <div class="form-group">
                                     <label>Execution Mode</label>
-                                    <div style="display: flex; gap: 14px; margin-top: 4px;">
+                                    <div style="display: flex; gap: 16px; margin-top: 4px;">
                                         <label style="display: flex; align-items: center; gap: 6px; font-weight: normal; cursor: pointer;">
-                                            <input type="radio" name="execMode" value="live" checked> Live Attack &amp; Contain
+                                            <input type="radio" name="simExecMode" value="live" checked> Live Attack &amp; Contain
                                         </label>
                                         <label style="display: flex; align-items: center; gap: 6px; font-weight: normal; cursor: pointer;">
-                                            <input type="radio" name="execMode" value="dryrun"> Dry-Run Simulation
+                                            <input type="radio" name="simExecMode" value="dryrun"> Dry-Run Simulation
                                         </label>
                                     </div>
                                 </div>
 
-                                <div style="margin-top: 24px; display: flex; gap: 10px;">
-                                    <button class="btn btn-primary" id="btnLaunchAttack" onclick="launchAttackTest()">
+                                <div class="auth-confirm-box">
+                                    <input type="checkbox" id="simAuthConfirmationCheck" checked>
+                                    <label for="simAuthConfirmationCheck">
+                                        <strong>Defensive Testing Authorization:</strong> I certify that this execution is strictly targeted at the authorized local ShopSphere test environment for defensive detection validation.
+                                    </label>
+                                </div>
+
+                                <div style="margin-top: 20px; display: flex; gap: 10px;">
+                                    <button class="btn btn-primary" id="btnLaunchAttack" onclick="launchAttackTest()" style="flex: 1;">
                                         <i class="fas fa-play"></i> Launch Simulation
                                     </button>
-                                    <button class="btn btn-danger" id="btnStopAttack" onclick="stopSecurityTest()" disabled>
+                                    <button class="btn btn-danger" id="btnStopAttack" onclick="abortCurrentSimulation()" disabled style="opacity: 0.5;">
                                         <i class="fas fa-stop"></i> Abort Test
                                     </button>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Live Telemetry & Stepper -->
-                        <div class="soc-card">
+                        <!-- Right: Live Execution Monitor & Console -->
+                        <div class="soc-card" id="simulationMonitorCard">
                             <div class="soc-card-header">
-                                <h3><i class="fas fa-terminal" style="color: var(--accent-cyan);"></i> Live Execution Stepper &amp; Terminal</h3>
-                                <span class="status-pill" id="attackStreamStatus">
-                                    <span class="indicator-dot"></span> IDLE
-                                </span>
+                                <h3><i class="fas fa-terminal" style="color: var(--accent-cyan);"></i> Live Execution Monitor &amp; Console</h3>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span class="badge badge-neutral" id="terminalStatusPill">IDLE</span>
+                                    <button class="btn btn-secondary" onclick="clearAttackTerminal()" title="Clear terminal output" style="padding: 2px 8px; font-size: 11px;">
+                                        <i class="fas fa-eraser"></i> Clear
+                                    </button>
+                                </div>
                             </div>
                             <div class="soc-card-body">
+                                <!-- Active Execution Metadata Ribbon -->
+                                <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0, 0, 0, 0.25); border: 1px solid var(--border-panel); border-radius: var(--radius-xs); padding: 8px 12px; margin-bottom: 14px; font-size: 11.5px; font-family: var(--font-mono);">
+                                    <div>EXEC ID: <strong id="simActiveExecId" style="color: var(--accent-cyan);">STANDBY</strong></div>
+                                    <div>DURATION: <strong id="timeDuration">0.0s</strong></div>
+                                    <div>START: <span id="timeStart">--:--:--</span></div>
+                                    <div>END: <span id="timeEnd">--:--:--</span></div>
+                                </div>
+
                                 <!-- 5-Stage Stepper -->
-                                <div class="stepper-container">
-                                    <div class="stepper-step" id="step1">
+                                <div class="stepper-container" id="simStepperContainer">
+                                    <div class="stepper-step active" id="simStep1">
                                         <div class="step-circle">1</div>
                                         <div class="step-label">Dispatch</div>
-                                        <div class="step-subtext">Probe fired</div>
+                                        <div class="step-subtext" id="simStepSub1">Ready</div>
                                     </div>
-                                    <div class="stepper-step" id="step2">
+                                    <div class="stepper-step" id="simStep2">
                                         <div class="step-circle">2</div>
-                                        <div class="step-label">Detection</div>
-                                        <div class="step-subtext">Signature / AI</div>
+                                        <div class="step-label">Transmission</div>
+                                        <div class="step-subtext" id="simStepSub2">HTTP Ingestion</div>
                                     </div>
-                                    <div class="stepper-step" id="step3">
+                                    <div class="stepper-step" id="simStep3">
                                         <div class="step-circle">3</div>
-                                        <div class="step-label">Quarantine</div>
-                                        <div class="step-subtext">IP blocked</div>
+                                        <div class="step-label">Detection</div>
+                                        <div class="step-subtext" id="simStepSub3">Rule Trigger</div>
                                     </div>
-                                    <div class="stepper-step" id="step4">
+                                    <div class="stepper-step" id="simStep4">
                                         <div class="step-circle">4</div>
-                                        <div class="step-label">AST Patch</div>
-                                        <div class="step-subtext">Self-healing</div>
+                                        <div class="step-label">Quarantine</div>
+                                        <div class="step-subtext" id="simStepSub4">Perimeter Block</div>
                                     </div>
-                                    <div class="stepper-step" id="step5">
+                                    <div class="stepper-step" id="simStep5">
                                         <div class="step-circle">5</div>
                                         <div class="step-label">Verification</div>
-                                        <div class="step-subtext">Dual probe</div>
+                                        <div class="step-subtext" id="simStepSub5">Dual Probe</div>
                                     </div>
                                 </div>
 
                                 <!-- Terminal Output -->
-                                <div class="soc-terminal-container" id="attackTerminalLogs">
-                                    <div class="terminal-line info">[INIT] AutoHeal Autonomous Security Sentinel ready.</div>
-                                    <div class="terminal-line">[INFO] Select a test scenario and click 'Launch Simulation'.</div>
+                                <div class="soc-terminal-container" id="attackTerminalLogs" style="height: 250px; overflow-y: auto;">
+                                    <div class="terminal-line info">[INIT] AutoHeal Defensive Security Testing Platform Initialized.</div>
+                                    <div class="terminal-line">[INFO] Localhost boundary enforcement: ACTIVE.</div>
+                                    <div class="terminal-line">[READY] Select a scenario and click 'Launch Simulation' to benchmark telemetry.</div>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Healing Evidence Card (Shown upon successful run) -->
-                    <div class="soc-card" id="healingResultCard" style="display: none;">
+                    <!-- 5. Detection & Remediation Validation Inspector Card -->
+                    <div class="soc-card" id="simValidationInspectorCard" style="display: none; margin-bottom: 24px;">
                         <div class="soc-card-header">
-                            <h3><i class="fas fa-circle-check" style="color: var(--status-success);"></i> Autonomous Healing &amp; Verification Evidence</h3>
-                            <span class="badge badge-success">VERIFIED 100% CONTAINED</span>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <h3><i class="fas fa-shield-check" style="color: var(--status-success);"></i> Detection &amp; Remediation Validation Dossier</h3>
+                                <span class="badge badge-success" id="simValidationOutcomeBadge">DETECTED &amp; CONTAINED</span>
+                            </div>
+                            <button class="btn btn-secondary" onclick="document.getElementById('simValidationInspectorCard').style.display = 'none'" style="padding: 2px 8px; font-size: 11px;">
+                                <i class="fas fa-times"></i> Dismiss
+                            </button>
                         </div>
-                        <div class="soc-card-body" id="healingResultContent">
-                            <!-- Populated dynamically -->
+                        <div class="soc-card-body" id="simValidationContent">
+                            <!-- Populated dynamically via renderSimulationValidationDossier() -->
+                        </div>
+                    </div>
+
+                    <!-- 6. Simulation Execution History Section -->
+                    <div class="soc-card" id="simulationHistoryCard">
+                        <div class="soc-card-header">
+                            <div>
+                                <h3><i class="fas fa-history" style="color: var(--primary);"></i> Simulation Execution History &amp; Evidence Records</h3>
+                                <p style="margin: 2px 0 0 0; font-size: 0.78rem; color: var(--text-muted);">Immutable historical record of defensive security tests, detection benchmarks, and verified containments.</p>
+                            </div>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="btn btn-secondary" onclick="exportSimulationHistoryCSV()">
+                                    <i class="fas fa-download"></i> Export CSV
+                                </button>
+                                <button class="btn btn-secondary" onclick="loadSimulationHistory(1)">
+                                    <i class="fas fa-sync"></i> Refresh
+                                </button>
+                            </div>
+                        </div>
+                        <div class="soc-card-body">
+                            <!-- Filter Grid -->
+                            <div class="tc-filter-grid" style="margin-bottom: 16px;">
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label for="searchSimHistory">Search</label>
+                                    <input type="text" class="soc-input" id="searchSimHistory" placeholder="Execution ID, IP, Scenario..." onkeyup="onSimSearchKeyup(event)">
+                                </div>
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label for="filterSimScenario">Scenario</label>
+                                    <select class="soc-select" id="filterSimScenario" onchange="loadSimulationHistory(1)">
+                                        <option value="all">All Scenarios</option>
+                                        <option value="sqli">SQL Injection</option>
+                                        <option value="xss">Cross-Site Scripting</option>
+                                        <option value="failed_logins">Credential Stuffing</option>
+                                        <option value="admin">Admin Privilege Probe</option>
+                                        <option value="rate">Rate-Limit Flooding</option>
+                                        <option value="health">Health Error Cascade</option>
+                                        <option value="replay">Attack Replay</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label for="filterSimStatus">Status</label>
+                                    <select class="soc-select" id="filterSimStatus" onchange="loadSimulationHistory(1)">
+                                        <option value="all">All Statuses</option>
+                                        <option value="COMPLETED">COMPLETED</option>
+                                        <option value="RUNNING">RUNNING</option>
+                                        <option value="FAILED">FAILED</option>
+                                        <option value="CANCELLED">CANCELLED</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label for="filterSimOutcome">Detection Outcome</label>
+                                    <select class="soc-select" id="filterSimOutcome" onchange="loadSimulationHistory(1)">
+                                        <option value="all">All Outcomes</option>
+                                        <option value="DETECTED">DETECTED</option>
+                                        <option value="NOT_DETECTED">NOT_DETECTED</option>
+                                        <option value="PARTIALLY_DETECTED">PARTIALLY_DETECTED</option>
+                                        <option value="EXECUTION_FAILED">EXECUTION_FAILED</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- Telemetry Table -->
+                            <div class="table-container">
+                                <table class="tc-table" id="simulationsTable">
+                                    <thead>
+                                        <tr>
+                                            <th>Timestamp</th>
+                                            <th>Execution ID</th>
+                                            <th>Scenario</th>
+                                            <th>Target</th>
+                                            <th>Source IP</th>
+                                            <th>Mode</th>
+                                            <th>Status</th>
+                                            <th>Detection</th>
+                                            <th>Containment</th>
+                                            <th>Duration</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="simulationHistoryTableBody">
+                                        <!-- Loaded dynamically -->
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- Server-side Pagination -->
+                            <div class="tc-pagination" id="simPaginationBar">
+                                <div class="tc-pagination-info" id="simPaginationInfo">Showing 0 of 0 simulations</div>
+                                <div class="tc-pagination-controls">
+                                    <button class="tc-pagination-btn" id="simPagePrevBtn" onclick="changeSimHistoryPage(-1)" disabled>
+                                        <i class="fas fa-chevron-left"></i> Previous
+                                    </button>
+                                    <span class="tc-pagination-page" id="simPageCurrentDisplay">Page 1 of 1</span>
+                                    <button class="tc-pagination-btn" id="simPageNextBtn" onclick="changeSimHistoryPage(1)" disabled>
+                                        Next <i class="fas fa-chevron-right"></i>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </section>
@@ -2540,6 +2753,35 @@
                     <i class="fas fa-download"></i> Export JSON
                 </button>
             </div>
+        </div>
+    </aside>
+
+    <!-- ===================================================================
+         4B. SIDE-OVER SIMULATION EVIDENCE DRAWER (FORENSIC INSPECTOR)
+         =================================================================== -->
+    <div class="side-drawer-backdrop" id="simEvidenceBackdrop" onclick="closeSimulationEvidenceDrawer()"></div>
+    <aside class="side-drawer" id="simulationEvidenceDrawer" style="width: 640px;">
+        <div class="drawer-header">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <h3 style="margin: 0;"><i class="fas fa-microscope" style="color: var(--primary);"></i> <span id="simDrawerHeading">Simulation Evidence Dossier</span></h3>
+                <span id="simDrawerStatusBadge"></span>
+            </div>
+            <button class="drawer-close-btn" onclick="closeSimulationEvidenceDrawer()" aria-label="Close drawer">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="drawer-body" id="simEvidenceDrawerBody">
+            <div style="text-align: center; padding: 40px; color: var(--text-muted);">
+                <i class="fas fa-spinner fa-spin"></i> Loading execution evidence...
+            </div>
+        </div>
+        <div class="drawer-footer-actions">
+            <button class="btn btn-secondary btn-sm" onclick="exportSimulationDossierJson()">
+                <i class="fas fa-download"></i> Export JSON
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="closeSimulationEvidenceDrawer()">
+                <i class="fas fa-times"></i> Close
+            </button>
         </div>
     </aside>
 

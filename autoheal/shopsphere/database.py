@@ -301,6 +301,37 @@ def init_db():
         );
         """)
 
+        # 14. Simulation Executions History & Evidence Table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS simulation_executions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            execution_id TEXT UNIQUE NOT NULL,
+            scenario_id TEXT NOT NULL,
+            scenario_name TEXT NOT NULL,
+            risk_category TEXT NOT NULL DEFAULT 'Application Security',
+            severity TEXT NOT NULL DEFAULT 'HIGH',
+            target_url TEXT NOT NULL,
+            client_ip TEXT NOT NULL,
+            execution_mode TEXT NOT NULL DEFAULT 'live',
+            status TEXT NOT NULL DEFAULT 'COMPLETED',
+            detection_outcome TEXT NOT NULL DEFAULT 'DETECTED',
+            protection_verified INTEGER NOT NULL DEFAULT 0,
+            expected_rule_id TEXT,
+            actual_rule_id TEXT,
+            incident_id TEXT,
+            request_count INTEGER NOT NULL DEFAULT 1,
+            blocked_count INTEGER NOT NULL DEFAULT 1,
+            start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            end_time TIMESTAMP,
+            duration_ms REAL NOT NULL DEFAULT 0.0,
+            parameters_json TEXT DEFAULT '{}',
+            steps_json TEXT DEFAULT '[]',
+            evidence_json TEXT DEFAULT '{}',
+            error_message TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+
         # Enterprise Database Performance Indexes
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_blocked_clients_ip_active ON blocked_clients (client_ip, is_active, expires_at);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_security_events_temporal ON security_events (client_ip, timestamp);")
@@ -309,6 +340,10 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_security_events_corr ON security_events (correlation_id);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_event_investigations_event ON event_investigations (event_id);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_event_investigations_status ON event_investigations (status);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sim_exec_id ON simulation_executions (execution_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sim_scenario ON simulation_executions (scenario_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sim_status ON simulation_executions (status);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sim_time ON simulation_executions (start_time DESC);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_security_incidents_status ON security_incidents (status, severity, created_at DESC);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_orders_customer_email ON orders (customer_email, created_at DESC);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_cart_items_user ON cart_items (user_or_session_id);")

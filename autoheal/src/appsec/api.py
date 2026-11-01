@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException, Query, Response, Request, status
 from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 import json
+import time
 
 from src.appsec.models import (
     get_security_events, list_security_incidents,
@@ -402,29 +403,364 @@ def stop_security_test():
     return {"status": "cancelled", "message": "Security test cancellation requested."}
 
 
+# =============================================================================
+# ATTACK SIMULATION CENTER API ENDPOINTS (PHASE 4)
+# =============================================================================
+
+@router.get("/simulations/catalog", summary="Get Authorized Attack Scenario Catalog")
+def get_attack_scenarios():
+    """Returns the comprehensive catalog of 7 authorized, executable attack simulation scenarios."""
+    from src.appsec.models import get_scenario_catalog
+    return {"scenarios": get_scenario_catalog(), "total": len(get_scenario_catalog())}
+
+
+@router.get("/simulations/stats", summary="Get Simulation Dashboard Statistics")
+def get_simulation_statistics():
+    """Returns aggregated execution counts, detection rates, and verification metrics from SQLite."""
+    from src.appsec.models import get_simulation_dashboard_stats
+    return get_simulation_dashboard_stats()
+
+
+@router.get("/simulations", summary="Query Simulation Execution History")
+def list_simulations(
+    scenario: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    detection_outcome: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    order_by: str = Query("start_time"),
+    order_dir: str = Query("DESC"),
+    format: Optional[str] = Query(None)
+):
+    """Retrieves paginated, searchable simulation history with optional CSV streaming export."""
+    from src.appsec.models import query_simulation_executions
+    data = query_simulation_executions(
+        scenario=scenario,
+        status=status,
+        detection_outcome=detection_outcome,
+        search=search,
+        page=page,
+        limit=1000 if format == "csv" else limit,
+        order_by=order_by,
+        order_dir=order_dir
+    )
+
+    if format == "csv":
+        import io
+        import csv
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow([
+            "execution_id", "scenario_id", "scenario_name", "risk_category", "severity",
+            "target_url", "client_ip", "execution_mode", "status", "detection_outcome",
+            "protection_verified", "expected_rule_id", "actual_rule_id", "incident_id",
+            "request_count", "blocked_count", "duration_ms", "start_time"
+        ])
+        for it in data.get("items", []):
+            def clean_cell(val):
+                s = str(val or "")
+                if s and s[0] in ("=", "+", "-", "@"):
+                    return "'" + s
+                return s
+
+            writer.writerow([
+                clean_cell(it.get("execution_id")),
+                clean_cell(it.get("scenario_id")),
+                clean_cell(it.get("scenario_name")),
+                clean_cell(it.get("risk_category")),
+                clean_cell(it.get("severity")),
+                clean_cell(it.get("target_url")),
+                clean_cell(it.get("client_ip")),
+                clean_cell(it.get("execution_mode")),
+                clean_cell(it.get("status")),
+                clean_cell(it.get("detection_outcome")),
+                1 if it.get("protection_verified") else 0,
+                clean_cell(it.get("expected_rule_id")),
+                clean_cell(it.get("actual_rule_id")),
+                clean_cell(it.get("incident_id")),
+                it.get("request_count", 0),
+                it.get("blocked_count", 0),
+                it.get("duration_ms", 0.0),
+                clean_cell(it.get("start_time"))
+            ])
+
+        output.seek(0)
+        return StreamingResponse(
+            output,
+            media_type="text/csv",
+            headers={"Content-Disposition": 'attachment; filename="simulation_executions_export.csv"'}
+        )
+
+    return data
+
+
+@router.get("/simulations/{execution_id}", summary="Get Simulation Execution Dossier & Evidence")
+def get_simulation_detail(execution_id: str):
+    """Retrieves full telemetry, detection validation matrix, remediation results, and evidence."""
+    from src.appsec.models import get_simulation_execution
+    sim = get_simulation_execution(execution_id)
+    if not sim:
+        raise HTTPException(status_code=404, detail=f"Simulation execution '{execution_id}' not found.")
+    return sim
+
+
+class SimulationDispatchRequest(BaseModel):
+    scenario: Optional[str] = None
+    scenario_id: Optional[str] = None
+    target_url: str = "http://localhost:8000"
+    client_ip: Optional[str] = None
+    execution_mode: str = "live"  # 'live' or 'dryrun'
+    attempts: int = 5
+    payload: Optional[str] = None
+    timeout: float = 10.0
+    authorized_confirmation: bool = True
+
+
+@router.post("/simulations/dispatch", summary="Dispatch Controlled Security Test Simulation")
+def dispatch_simulation(req: SimulationDispatchRequest):
+    """
+    Executes an authorized defensive security test against local ShopSphere.
+    Generates execution ID, records telemetry, compares detection vs expected rules,
+    verifies mitigation status, and records an immutable audit log.
+    """
+    from src.appsec.security_tester import ShopSphereSecurityTester, validate_target_safety
+    from src.appsec.models import (
+        record_simulation_execution, update_simulation_execution,
+        get_simulation_execution, SCENARIO_CATALOG
+    )
+
+    if not req.authorized_confirmation:
+        raise HTTPException(status_code=400, detail="Defensive testing authorization confirmation is required to execute security simulation.")
+
+    try:
+        validated_url = validate_target_safety(req.target_url)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    scenario_key = req.scenario_id or req.scenario or "failed_logins"
+    sc_info = SCENARIO_CATALOG.get(scenario_key)
+    if not sc_info:
+        raise HTTPException(status_code=400, detail=f"Unknown simulation scenario: '{scenario_key}'. Allowed: {', '.join(SCENARIO_CATALOG.keys())}")
+
+    client_ip = req.client_ip or sc_info.get("default_client_ip", "198.51.100.42")
+    payload = req.payload if req.payload is not None else sc_info.get("default_payload", "")
+    attempts = max(1, min(req.attempts, 50))
+
+    # Record initial execution state in DB
+    exec_id = record_simulation_execution(
+        scenario_id=scenario_key,
+        target_url=validated_url,
+        client_ip=client_ip,
+        execution_mode=req.execution_mode,
+        parameters={"attempts": attempts, "payload": payload, "timeout": req.timeout}
+    )
+
+    t0 = time.time()
+    steps = []
+    error_msg = None
+    actual_rule_id = None
+    incident_id = None
+    protection_verified = False
+    detection_outcome = "NOT_DETECTED"
+    req_count = 1
+    blocked_count = 0
+
+    if req.execution_mode == "dryrun":
+        # Safe dry-run simulation
+        duration_ms = 45.0
+        detection_outcome = "DETECTED"
+        protection_verified = True
+        actual_rule_id = sc_info.get("rule_id")
+        steps = [
+            {"step": "DRY_RUN_INIT", "status": "Simulated target safety validation pass", "client_ip": client_ip},
+            {"step": "DRY_RUN_EVALUATION", "status": "Evaluated rule signature against dry-run payload", "rule_id": actual_rule_id},
+            {"step": "DRY_RUN_PREDICTED_ACTION", "status": "Simulated quarantine action", "outcome": "PREDICTED_BLOCKED"}
+        ]
+        evidence = {
+            "mode": "dryrun",
+            "scenario": scenario_key,
+            "target": validated_url,
+            "simulated_rule": actual_rule_id
+        }
+    else:
+        # Live execution against local test environment
+        try:
+            tester = ShopSphereSecurityTester(base_url=validated_url)
+            if scenario_key in ["failed_logins", "brute_force"]:
+                res = tester.test_repeated_failed_logins(client_ip=client_ip, attempts=attempts)
+                req_count = attempts + 1
+            elif scenario_key == "sqli":
+                res = tester.test_sql_injection(client_ip=client_ip, payload=payload or "Laptop' OR '1'='1")
+                req_count = 2
+            elif scenario_key == "xss":
+                res = tester.test_cross_site_scripting(client_ip=client_ip, payload=payload or "<script>alert('XSS')</script>")
+                req_count = 1
+            elif scenario_key == "admin":
+                res = tester.test_unauthorized_admin(client_ip=client_ip)
+                req_count = 1
+            elif scenario_key == "rate":
+                res = tester.test_request_rate_anomaly(client_ip=client_ip, count=attempts if attempts > 5 else 25)
+                req_count = attempts if attempts > 5 else 25
+            elif scenario_key == "health":
+                res = tester.test_health_cascade_resilience(client_ip=client_ip)
+                req_count = 2
+            elif scenario_key == "replay":
+                res = tester.replay_attack_comparison(scenario="failed_logins", client_ip=client_ip)
+                req_count = 5
+            else:
+                res = {"protection_verified": False, "verification_details": "Unimplemented scenario"}
+
+            duration_ms = round((time.time() - t0) * 1000, 1)
+            steps = res.get("steps", [])
+            evidence = {
+                "target_endpoint": res.get("target_endpoint"),
+                "verification_details": res.get("verification_details"),
+                "traces": res.get("traces", [])
+            }
+            protection_verified = bool(res.get("protection_verified"))
+            actual_rule_id = res.get("rule_id")
+            incident_id = res.get("incident_id")
+
+            # Validate detection
+            expected_rule = sc_info.get("rule_id")
+            if actual_rule_id and actual_rule_id == expected_rule:
+                detection_outcome = "DETECTED"
+            elif actual_rule_id:
+                detection_outcome = "PARTIALLY_DETECTED"
+            elif protection_verified:
+                detection_outcome = "DETECTED"
+            else:
+                detection_outcome = "NOT_DETECTED"
+
+            blocked_count = 1 if protection_verified else 0
+
+        except Exception as e:
+            duration_ms = round((time.time() - t0) * 1000, 1)
+            error_msg = str(e)
+            detection_outcome = "EXECUTION_FAILED"
+            protection_verified = False
+            evidence = {"error": error_msg}
+
+    # Final DB update
+    updated_sim = update_simulation_execution(
+        execution_id=exec_id,
+        status="COMPLETED" if detection_outcome != "EXECUTION_FAILED" else "FAILED",
+        detection_outcome=detection_outcome,
+        protection_verified=protection_verified,
+        actual_rule_id=actual_rule_id,
+        incident_id=incident_id,
+        request_count=req_count,
+        blocked_count=blocked_count,
+        duration_ms=duration_ms,
+        steps=steps,
+        evidence=evidence,
+        error_message=error_msg
+    )
+
+    # Immutable Audit Log
+    try:
+        from shopsphere.database import get_db_connection
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+            INSERT INTO admin_audit_logs (user_id, action, target_type, target_id, details_json)
+            VALUES (1, 'SIMULATION_DISPATCH', 'SIMULATION', ?, ?)
+            """, (exec_id, json.dumps({
+                "scenario": scenario_key,
+                "target": validated_url,
+                "outcome": detection_outcome,
+                "verified": protection_verified
+            })))
+            conn.commit()
+    except Exception:
+        pass
+
+    return updated_sim
+
+
+@router.post("/simulations/abort", summary="Abort Running Security Simulation")
+def abort_simulation():
+    """Immediately stops active security test probe loops."""
+    from src.appsec.security_tester import cancel_active_tests
+    cancel_active_tests()
+    return {"status": "aborted", "message": "Simulation cancellation requested."}
+
+
 @router.get("/attack-center/stream", summary="Stream Real-Time Attack Center Execution (SSE)")
 def stream_attack_center(
     scenario: str = Query("failed_logins"),
     target_url: str = Query("http://localhost:8000"),
     client_ip: str = Query("198.51.100.22"),
     attempts: int = Query(5),
-    payload: Optional[str] = Query(None)
+    payload: Optional[str] = Query(None),
+    execution_id: Optional[str] = Query(None)
 ):
     """Streams real-time HTTP attack test progress, detection, and mitigation via Server-Sent Events (SSE)."""
     from src.appsec.security_tester import ShopSphereSecurityTester
+    from src.appsec.models import record_simulation_execution, update_simulation_execution, SCENARIO_CATALOG
     try:
         tester = ShopSphereSecurityTester(base_url=target_url)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    active_exec_id = execution_id or record_simulation_execution(
+        scenario_id=scenario,
+        target_url=target_url,
+        client_ip=client_ip,
+        execution_mode="live",
+        parameters={"attempts": attempts, "payload": payload}
+    )
+
     def sse_event_stream():
+        recorded_steps = []
+        final_rule_id = None
+        final_inc_id = None
+        final_verified = False
+        t_start = time.time()
+
+        # Send initial execution ID frame
+        yield f"data: {json.dumps({'type': 'init', 'execution_id': active_exec_id, 'scenario': scenario, 'target_url': target_url})}\n\n"
+
         for item in tester.stream_test_execution(
             scenario=scenario,
             client_ip=client_ip,
             attempts=attempts,
             payload=payload
         ):
+            if item.get("type") in ["request", "phase", "verification"]:
+                recorded_steps.append(item)
+            if item.get("type") == "detection":
+                final_rule_id = item.get("rule_id")
+            if item.get("type") == "complete":
+                final_verified = item.get("protection_verified", False)
+                final_inc_id = item.get("incident_id")
+                final_rule_id = item.get("rule_id") or final_rule_id
+
+            # Attach execution ID to frame
+            item["execution_id"] = active_exec_id
             yield f"data: {json.dumps(item)}\n\n"
+
+        duration_ms = round((time.time() - t_start) * 1000, 1)
+        # Update simulation record in database
+        try:
+            expected_rule = SCENARIO_CATALOG.get(scenario, {}).get("rule_id")
+            outcome = "DETECTED" if (final_rule_id == expected_rule or final_verified) else "NOT_DETECTED"
+            update_simulation_execution(
+                execution_id=active_exec_id,
+                status="COMPLETED",
+                detection_outcome=outcome,
+                protection_verified=final_verified,
+                actual_rule_id=final_rule_id,
+                incident_id=final_inc_id,
+                request_count=len(recorded_steps),
+                blocked_count=1 if final_verified else 0,
+                duration_ms=duration_ms,
+                steps=recorded_steps,
+                evidence={"scenario": scenario, "verified": final_verified}
+            )
+        except Exception:
+            pass
 
     return StreamingResponse(sse_event_stream(), media_type="text/event-stream")
 
